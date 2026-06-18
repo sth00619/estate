@@ -26,15 +26,54 @@ import os, sys, json, time, datetime, statistics, urllib.request, urllib.parse
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
-KEY  = os.environ.get("MOLIT_API_KEY", "")
+KEY_RAW = os.environ.get("MOLIT_API_KEY", "")
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(HERE, "data")
-# data.go.kr decoded key goes in serviceKey; http (not https) avoids some SSL issues.
-URL  = "http://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
+URL  = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
+
+def normalize_key(raw):
+    """
+    data.go.kr issues a key in two equivalent forms:
+      - "Encoding" key: already percent-encoded (contains %2B, %2F, %3D, ...)
+      - "Decoding" key / "일반 인증키": raw, may contain literal +, /, =
+    Either one works here as long as we encode it for the URL exactly once.
+    If it already looks percent-encoded (has a '%' followed by 2 hex digits),
+    we assume it's the Encoding key and use it AS-IS in the URL. Otherwise we
+    percent-encode it ourselves. This makes the script work no matter which
+    of the two key types the user copied from the portal.
+    """
+    import re
+    if re.search(r"%[0-9A-Fa-f]{2}", raw):
+        return raw  # already encoded — splice in as-is
+    return urllib.parse.quote(raw, safe="")  # raw/decoding key — encode once
+
+KEY = normalize_key(KEY_RAW)
 
 MONTHS_BACK   = int(os.environ.get("MOLIT_MONTHS", "3"))
 PRICE_CAP     = 400   # max raw prices stored per 동 (histogram is enough)
 PER_PY_DIVISOR = 3.305785  # ㎡ per 평
+
+# Official data.go.kr error codes (from 기술문서 Ⅱ. OPENAPI 에러 코드정리).
+# Surfaced verbatim so a failed run tells you exactly what to check, instead
+# of a bare "API error 30".
+ERROR_HINTS = {
+    "01": "제공기관 서비스 장애 — 잠시 후 다시 시도하세요.",
+    "02": "제공기관 DB 장애 — 잠시 후 다시 시도하세요.",
+    "03": "해당 조건에 데이터가 없습니다 (LAWD_CD/DEAL_YMD 확인).",
+    "04": "제공기관 HTTP 오류 — 잠시 후 다시 시도하세요.",
+    "05": "제공기관 서비스 타임아웃 — 잠시 후 다시 시도하세요.",
+    "10": "serviceKey 파라미터가 누락되었습니다. URL을 확인하세요.",
+    "11": "필수 요청 파라미터가 누락되었습니다 (LAWD_CD/DEAL_YMD).",
+    "12": "요청 URL이 잘못되었거나 서비스가 폐기되었습니다.",
+    "20": "활용신청이 아직 승인되지 않았습니다. data.go.kr 마이페이지에서 "
+          "승인상태를 확인하세요 (보통 신청 후 2~3일, 승인 시 가입 이메일로 통지).",
+    "22": "일일 트래픽(기본 10,000건) 초과. 다음 날 재시도하거나 운영계정 전환을 신청하세요.",
+    "30": "서비스키가 등록되지 않았거나 URL 인코딩 상태가 맞지 않습니다. "
+          "MOLIT_API_KEY 값을 data.go.kr 마이페이지의 키와 다시 비교하세요.",
+    "31": "서비스키 사용기간이 만료되었습니다. 활용연장 신청이 필요합니다.",
+    "32": "활용신청 시 등록한 도메인/IP와 호출 서버가 다릅니다. "
+          "GitHub Actions에서 호출 중이라면 IP 제한 없이 신청했는지 확인하세요.",
+}
 
 def recent_yyyymm(n):
     today = datetime.date.today()
@@ -48,11 +87,17 @@ def recent_yyyymm(n):
     return out
 
 def call(lawd, ymd, page, retries=3):
-    params = {
-        "serviceKey": KEY, "LAWD_CD": lawd, "DEAL_YMD": ymd,
+    # IMPORTANT: data.go.kr issues TWO key formats — "Encoding" (already
+    # percent-encoded, e.g. contains %2B/%2F/%3D) and "Decoding" (raw).
+    # Whichever one the user has, we must NOT percent-encode it a second
+    # time, or '%' becomes '%25' and the key is rejected
+    # (SERVICE_KEY_IS_NOT_REGISTERED_ERROR). So: splice serviceKey into the
+    # URL untouched, and urlencode only the remaining plain params.
+    other = urllib.parse.urlencode({
+        "LAWD_CD": lawd, "DEAL_YMD": ymd,
         "pageNo": str(page), "numOfRows": "1000",
-    }
-    url = URL + "?" + urllib.parse.urlencode(params, safe="/+=")
+    })
+    url = f"{URL}?serviceKey={KEY}&{other}"
     last = None
     for _ in range(retries):
         try:
@@ -69,12 +114,28 @@ def parse_items(xml_text):
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
-        return items, 0
-    # error check
+        # not XML at all -- often an HTML error page or truncated response
+        snippet = xml_text[:200].replace("\n", " ")
+        raise RuntimeError(f"non-XML response (truncated/HTML?): {snippet}")
     header = root.find(".//resultCode")
     if header is not None and header.text not in ("00", "000", None):
+        code = (header.text or "").strip()
         msg = root.find(".//resultMsg")
-        raise RuntimeError(f"API error {header.text}: {msg.text if msg is not None else ''}")
+        msgtext = msg.text if msg is not None else ""
+        hint = ERROR_HINTS.get(code, "data.go.kr 활용신청 상태와 서비스키를 확인하세요.")
+        raise RuntimeError(f"API error {code} ({msgtext}) — {hint}")
+
+    # data.go.kr's gateway sometimes returns auth failures in a different
+    # shape entirely (no resultCode at all), e.g.:
+    #   <cmmMsgHeader><returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg></cmmMsgHeader>
+    # Catch that here so it doesn't silently look like "0 results".
+    auth_msg = root.find(".//returnAuthMsg")
+    if auth_msg is not None and auth_msg.text:
+        raise RuntimeError(
+            f"gateway auth error: {auth_msg.text} — 서비스키가 등록되지 않았거나 아직 "
+            "승인되지 않았습니다. data.go.kr 마이페이지에서 활용신청 승인상태와 키 값을 확인하세요."
+        )
+
     total_el = root.find(".//totalCount")
     total = int(total_el.text) if total_el is not None and total_el.text else 0
     for it in root.findall(".//item"):
@@ -114,7 +175,7 @@ def quantile(xs, q):
     return round(s[idx], 1)
 
 def main():
-    if not KEY:
+    if not KEY_RAW:
         print("ERROR: MOLIT_API_KEY not set. Keeping existing trades_latest.json.")
         sys.exit(0)
 
@@ -127,12 +188,18 @@ def main():
     sgg_name = {x["lawd"]: x["name"] for x in lawd}
 
     done = 0
+    FATAL_CODES = ("20", "30", "31", "32", "10")  # same root cause every call; no point retrying per-district
     for entry in lawd:
         code = entry["lawd"]
         try:
             rows = fetch_lawd_months(code, months)
         except Exception as e:
-            print(f"  {code} {entry['name']}: error {e} (skip)")
+            msg = str(e)
+            print(f"  {code} {entry['name']}: error {e}")
+            if any(f"API error {fc} " in msg for fc in FATAL_CODES) or "gateway auth error" in msg:
+                print("\nSTOPPING: this error applies to every request, not just this district.")
+                print("Fix the key/approval issue above, then re-run. Keeping existing trades_latest.json.")
+                sys.exit(0)
             continue
         for r in rows:
             try:
