@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>닥터마빈의 부동산 리포트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F5F6F8; --surface:#FFFFFF; --surface-2:#FAFBFC;
+  --line:#E8EAED; --line-2:#F0F1F3;
+  --text:#1A1A1A; --text-2:#555B62; --text-3:#8B95A1;
+  --naver:#03C75A; --naver-dark:#02B350;
+  --blue:#2E7CF6; --red:#E5474D; --amber:#F5A623; --purple:#7C5CFC;
+  --up:#E5474D; --down:#2E7CF6; /* KR convention: 상승=red, 하락=blue */
+  --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg:0 4px 16px rgba(0,0,0,0.08);
+}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+a{color:var(--naver);text-decoration:none}
+/* Header */
+.header{position:sticky;top:0;z-index:1000;background:rgba(255,255,255,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;color:var(--text)}
+.brand-dot{width:10px;height:10px;border-radius:50%;background:var(--naver);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(3,199,90,0.4)}50%{box-shadow:0 0 0 7px rgba(3,199,90,0)}}
+.header-right{display:flex;align-items:center;gap:14px}
+.date-badge{font-size:12px;color:var(--text-2);background:var(--surface-2);border:1px solid var(--line);padding:4px 12px;border-radius:8px}
+.week-select{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 36px 8px 16px;font-size:13px;color:var(--text);font-weight:600;font-family:'Noto Sans KR',sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23555B62' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;transition:all .2s;box-shadow:var(--shadow)}
+.week-select:hover{border-color:var(--naver)}
+.week-select option{background:#fff;color:var(--text)}
+/* Layout */
+.container{max-width:1200px;margin:0 auto;padding:20px 16px 40px}
+/* Ticker */
+.ticker{display:flex;gap:8px;overflow-x:auto;padding:12px 0;margin-bottom:24px;scrollbar-width:none}
+.ticker::-webkit-scrollbar{display:none}
+.tick-item{flex:0 0 auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:130px;text-align:center;box-shadow:var(--shadow)}
+.tick-label{font-size:10px;color:var(--text-3);font-weight:600;margin-bottom:4px;letter-spacing:.3px}
+.tick-val{font-size:15px;font-weight:700;color:var(--text)}
+.tick-sub{font-size:10px;color:var(--text-2);margin-top:2px}
+.tick-val.up{color:var(--up)}.tick-val.down{color:var(--down)}.tick-val.amber{color:var(--amber)}
+/* Sections */
+.section{margin-bottom:28px}
+.section-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px;padding-left:2px}
+.section-num{font-size:11px;background:var(--naver);color:#fff;padding:3px 9px;border-radius:7px;font-weight:800}
+.section-hint{font-size:11px;color:var(--text-3);font-weight:400;margin-left:auto;padding-right:4px}
+/* Cards */
+.card-row{display:grid;gap:12px}
+.card-row.c4{grid-template-columns:repeat(4,1fr)}
+.card-row.c3{grid-template-columns:repeat(3,1fr)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;cursor:pointer;transition:transform .2s,box-shadow .2s;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+.card::before{content:'';position:absolute;top:0;left:0;bottom:0;width:4px}
+.card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.card.blue::before{background:var(--blue)}
+.card.green::before{background:var(--naver)}
+.card.red::before{background:var(--red)}
+.card.amber::before{background:var(--amber)}
+.card.purple::before{background:var(--purple)}
+.card.pink::before{background:#EC4899}
+.card-label{font-size:11px;color:var(--text-3);font-weight:600;margin-bottom:6px}
+.card-value{font-size:23px;font-weight:900;color:var(--text);margin-bottom:4px;letter-spacing:-0.5px}
+.card-value.up{color:var(--up)}.card-value.down{color:var(--down)}
+.card-change{font-size:11px;color:var(--text-2)}
+.card-note{font-size:10px;color:var(--text-3);margin-top:6px;line-height:1.5}
+.card-badge{display:inline-block;font-size:9px;font-weight:700;padding:3px 9px;border-radius:7px;margin-top:8px}
+.badge-up{background:rgba(3,199,90,0.1);color:var(--naver-dark)}
+.badge-info{background:rgba(46,124,246,0.1);color:var(--blue)}
+.badge-warn{background:rgba(245,166,35,0.12);color:#C77F00}
+.badge-hot{background:rgba(229,71,77,0.1);color:var(--red)}
+/* Expand panel */
+.expand-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;margin-top:12px;cursor:pointer;font-size:12px;color:var(--text-2);background:var(--surface);border:1px solid var(--line);border-radius:12px;transition:all .2s;font-weight:600}
+.expand-btn:hover{color:var(--naver);border-color:var(--naver);background:rgba(3,199,90,0.03)}
+.expand-btn .arrow{transition:transform .3s}
+.expand-btn.open .arrow{transform:rotate(180deg)}
+.detail-panel{max-height:0;overflow:hidden;transition:max-height .5s cubic-bezier(0.4,0,0.2,1)}
+.detail-panel.open{max-height:3000px}
+.detail-content{padding:16px 2px}
+/* Tables */
+.data-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;background:var(--surface);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.data-table th{text-align:left;padding:10px 12px;color:var(--text-2);font-weight:700;border-bottom:1px solid var(--line);font-size:11px;background:var(--surface-2)}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--line-2);color:var(--text)}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--surface-2)}
+.dir-up{color:var(--up);font-weight:700}.dir-down{color:var(--down);font-weight:700}
+/* Insight box */
+.insight-box{background:rgba(3,199,90,0.05);border:1px solid rgba(3,199,90,0.18);border-radius:14px;padding:16px;margin-top:16px}
+.insight-title{font-size:13px;font-weight:800;color:var(--naver-dark);margin-bottom:8px}
+.insight-body{font-size:12px;color:var(--text-2);line-height:1.8}
+.insight-body strong{color:var(--text)}
+/* Seoul detail */
+.seoul-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.seoul-item{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow)}
+.seoul-area{font-size:12px;font-weight:700;color:var(--text)}
+.seoul-desc{font-size:10px;color:var(--text-3);margin-top:2px}
+.seoul-rate{font-size:14px;font-weight:800}
+.zone-label{font-size:11px;font-weight:700;margin-bottom:6px;padding:4px 11px;border-radius:7px;display:inline-block}
+/* Meter */
+.meter-wrap{margin-top:10px}
+.meter-bar{height:8px;border-radius:6px;background:var(--line);overflow:hidden}
+.meter-fill{height:100%;border-radius:6px;transition:width .6s}
+.meter-labels{display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text-3)}
+/* Chart wrappers */
+.chart-wrap{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:16px;box-shadow:var(--shadow)}
+.chart-title{font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:12px}
+.chart-canvas{width:100%!important;max-height:260px}
+/* Timeline */
+.timeline{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:16px 4px;position:relative;scrollbar-width:none;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.timeline::-webkit-scrollbar{display:none}
+.tl-node{display:flex;flex-direction:column;align-items:center;min-width:100px;position:relative;cursor:pointer}
+.tl-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);background:#fff;z-index:2;transition:all .3s}
+.tl-dot.past{background:var(--naver);border-color:var(--naver)}
+.tl-dot.current{background:var(--amber);border-color:var(--amber);box-shadow:0 0 0 4px rgba(245,166,35,0.25)}
+.tl-dot.future{background:#fff;border-color:var(--line)}
+.tl-label{font-size:10px;color:var(--text-2);margin-top:8px;text-align:center;line-height:1.3;font-weight:600}
+.tl-date{font-size:9px;color:var(--text-3);margin-top:2px}
+.tl-line{position:absolute;top:7px;left:50%;width:100%;height:2px;background:var(--line);z-index:1}
+.tl-node:last-child .tl-line{display:none}
+.tl-line.past{background:var(--naver)}
+/* Schedule table */
+.sched-table{width:100%;font-size:12px;border-collapse:collapse;background:var(--surface);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.sched-table th{text-align:left;padding:10px;color:var(--text-2);font-weight:700;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.sched-table td{padding:10px;border-bottom:1px solid var(--line-2);color:var(--text)}
+.sched-table tr:last-child td{border-bottom:none}
+.dday{font-weight:800;color:var(--amber)}
+/* Signals */
+.signal-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:12px;transition:transform .2s,box-shadow .2s;box-shadow:var(--shadow);border-left:4px solid var(--naver)}
+.signal-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.signal-num{font-size:11px;font-weight:800;color:var(--naver-dark);margin-bottom:6px;letter-spacing:.5px}
+.signal-icon{font-size:20px;margin-bottom:8px}
+.signal-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:10px;line-height:1.5}
+.signal-body{font-size:12px;color:var(--text-2);line-height:1.85}
+.signal-body strong{color:var(--text)}
+/* Regulation table */
+.reg-table{width:100%;font-size:11px;border-collapse:collapse;background:var(--surface);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.reg-table th{padding:10px;text-align:left;color:var(--text-2);font-weight:700;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.reg-table td{padding:10px;border-bottom:1px solid var(--line-2);color:var(--text)}
+.reg-table tr:last-child td{border-bottom:none}
+.reg-status{font-size:10px;font-weight:700;padding:3px 9px;border-radius:7px}
+.reg-active{background:rgba(229,71,77,0.1);color:var(--red)}
+.reg-pending{background:rgba(245,166,35,0.12);color:#C77F00}
+/* ===== MAP ===== */
+.map-shell{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;position:relative;box-shadow:var(--shadow)}
+#rmap{width:100%;height:480px;border-radius:14px;background:#EAEEF2;z-index:1}
+.map-cap{font-size:11px;color:var(--text-3);margin-top:10px;line-height:1.6;text-align:center}
+.leaflet-container{background:#EAEEF2;font-family:'Noto Sans KR',sans-serif}
+.map-info{background:rgba(255,255,255,0.96);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--text);box-shadow:var(--shadow-lg)}
+.map-info b{color:var(--text);font-size:13px}
+.map-legend{background:rgba(255,255,255,0.96);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:10px;color:var(--text-2);line-height:1.7;box-shadow:var(--shadow-lg)}
+.map-legend .ml-t{font-size:10px;font-weight:800;color:var(--text-2);margin-bottom:6px;letter-spacing:.2px}
+.map-legend .ml-row{display:flex;align-items:center;gap:6px}
+.map-legend .ml-sw{width:14px;height:10px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,0.05)}
+.rm-popup .leaflet-popup-content-wrapper{background:#fff;color:var(--text);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lg)}
+.rm-popup .leaflet-popup-tip{background:#fff;border:1px solid var(--line)}
+.rm-popup .leaflet-popup-content{margin:14px 16px}
+.rm-pop-h{font-size:15px;font-weight:800;color:var(--text);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.rm-pop-row{display:flex;justify-content:space-between;align-items:center;gap:18px;font-size:12px;color:var(--text-2);padding:3px 0}
+.rm-pop-row b{font-size:14px;color:var(--text)}
+.rm-pop-desc{font-size:11px;color:var(--text-2);margin:6px 0;padding:6px 8px;background:var(--surface-2);border-radius:8px}
+.rm-pop-foot{font-size:10px;color:var(--text-3);margin-top:8px;text-align:right}
+.leaflet-control-zoom a{background:#fff!important;color:var(--text)!important;border-color:var(--line)!important}
+.leaflet-control-attribution{background:rgba(255,255,255,0.8)!important;color:var(--text-3)!important}
+.leaflet-control-attribution a{color:var(--text-2)!important}
+/* Footer */
+.footer{text-align:center;padding:30px 16px;border-top:1px solid var(--line);margin-top:40px}
+.footer-brand{font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px}
+.footer-sub{font-size:11px;color:var(--text-3);line-height:1.6}
+/* Responsive */
+@media(max-width:768px){
+  .card-row.c4,.card-row.c3{grid-template-columns:1fr 1fr}
+  .header{flex-direction:column;gap:10px;padding:12px 16px}
+  .brand{font-size:15px}
+  .seoul-grid{grid-template-columns:1fr}
+  .timeline{gap:0}
+  .tl-node{min-width:80px}
+  #rmap{height:380px}
+  .section-hint{display:none}
+}
+@media(max-width:480px){
+  .card-row.c4,.card-row.c3{grid-template-columns:1fr}
+  .card-value{font-size:18px}
+  #rmap{height:340px}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="brand"><span class="brand-dot"></span>닥터마빈의 부동산 리포트</div>
+  <div class="header-right">
+    <span class="date-badge" id="dateBadge">5월1주(5.4) 기준</span>
+    <select class="week-select" id="weekSelect" onchange="renderWeek(this.value)">
+      <option value="w7" selected>6월 2주 (6.8 기준)</option>
+      <option value="w6">6월 1주 (6.1 기준)</option>
+      <option value="w5">5월 5주 (5.25 기준)</option>
+      <option value="w4">5월 4주 (5.18 기준)</option>
+      <option value="w3">5월 3주 (5.11 기준)</option>
+      <option value="w2">5월 2주 (5.4 기준)</option>
+      <option value="w1">5월 1주 (4.28 기준)</option>
+    </select>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="tick-item"><div class="tick-label">한국 기준금리</div><div class="tick-val" id="tick-krRate">2.50%</div></div>
+  <div class="tick-item"><div class="tick-label">미국 금리</div><div class="tick-val" id="tick-usRate">3.50~3.75%</div></div>
+  <div class="tick-item"><div class="tick-label">한미 격차</div><div class="tick-val down" id="tick-gap">-1.13%p</div></div>
+  <div class="tick-item"><div class="tick-label">주담대 금리</div><div class="tick-val" id="tick-mortgage">4.29~4.34%</div></div>
+  <div class="tick-item"><div class="tick-label">M2 광의통화</div><div class="tick-val amber" id="tick-m2">4,618조</div></div>
+  <div class="tick-item"><div class="tick-label">서울 매물</div><div class="tick-val" id="tick-listing">69,175건</div><div class="tick-sub" id="tick-listingChg">▼ 한달 -9.2%</div></div>
+  <div class="tick-item"><div class="tick-label">양도세 중과</div><div class="tick-val amber" id="tick-taxStatus">5.10 재시행</div><div class="tick-sub" id="tick-taxChg">시행 중</div></div>
+</div>
+
+<!-- SECTION 1: MAP (NEW) -->
+<div class="section">
+  <div class="section-title"><span class="section-num">01</span>지도로 보는 수도권 시세
+    <span class="section-hint">지역을 클릭하면 상세 정보가 표시됩니다 · 색상 = 주간 매매변동률</span>
+  </div>
+  <div class="map-shell">
+    <div id="rmap"></div>
+    <div class="map-cap" id="mapCap">서울 25개 자치구는 주간 매매변동률로 색칠됩니다. 데이터가 집계된 주요 자치구만 색상으로 표시되며, 나머지는 회색입니다. 경기·인천은 시군구 상세 데이터 준비 중입니다.</div>
+  </div>
+</div>
+
+<!-- SECTION 2: 매매 -->
+<div class="section">
+  <div class="section-title"><span class="section-num">02</span>전국 매매가격지수 — 주간변동률</div>
+  <div class="card-row c4">
+    <div class="card blue" onclick="togglePanel('s1')">
+      <div class="card-label">전국</div>
+      <div class="card-value up" id="s1-nation-val">+0.04%</div>
+      <div class="card-change" id="s1-nation-chg">전주 대비 ▲ 상승</div>
+      <div class="card-note" id="s1-nation-note">전월 대비 +0.16% · 전년동월 대비 +1.9%</div>
+    </div>
+    <div class="card green" onclick="togglePanel('s1')">
+      <div class="card-label">서울</div>
+      <div class="card-value up" id="s1-seoul-val">+0.15%</div>
+      <div class="card-change" id="s1-seoul-chg">16주 연속 상승 · 3주 연속 0.15%</div>
+      <div class="card-note" id="s1-seoul-note">강남 -0.04% 유일 하락 vs 24개구 상승<br>서초·송파·용산 상승 전환</div>
+      <div class="card-badge badge-up" id="s1-seoul-badge">강북+강남권 확산</div>
+    </div>
+    <div class="card blue" onclick="togglePanel('s1')">
+      <div class="card-label">수도권</div>
+      <div class="card-value up" id="s1-metro-val">+0.08%</div>
+      <div class="card-change" id="s1-metro-chg">서울 확산 + 경기 풍선효과</div>
+      <div class="card-note" id="s1-metro-note">양도세 중과 후 수도권 매물 급감 중</div>
+    </div>
+    <div class="card amber" onclick="togglePanel('s1')">
+      <div class="card-label">지방</div>
+      <div class="card-value down" id="s1-local-val">-0.01%</div>
+      <div class="card-change" id="s1-local-chg">▼ 하락 지속</div>
+      <div class="card-note" id="s1-local-note">5대광역시 -0.02% · 8개도 +0.01%</div>
+    </div>
+  </div>
+  <div class="expand-btn" onclick="togglePanel('s1')">상세 데이터 보기 <span class="arrow">▼</span></div>
+  <div class="detail-panel" id="panel-s1">
+    <div class="detail-content">
+      <table class="data-table" id="tradeTableEl">
+        <thead><tr><th>지역</th><th>주간(%)</th><th>월간(%)</th><th>방향</th><th>비고</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div style="margin-top:20px;font-size:13px;font-weight:700;color:#F8FAFC;margin-bottom:10px">서울 자치구별 상세</div>
+      <div id="seoulDetailEl" class="seoul-grid"></div>
+      <div class="insight-box" id="tradeInsightEl"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 3: 전세 -->
+<div class="section">
+  <div class="section-title"><span class="section-num">03</span>전세/월세 — 시장 동향</div>
+  <div class="card-row c4">
+    <div class="card purple" onclick="togglePanel('s2')">
+      <div class="card-label">전국 전세</div>
+      <div class="card-value up" id="s2-nation-val">+0.10%</div>
+      <div class="card-change" id="s2-nation-chg">전주 대비 ▲ 상승</div>
+      <div class="card-note" id="s2-nation-note">전월 +0.40% · 전년동월 +2.5%</div>
+    </div>
+    <div class="card red" onclick="togglePanel('s2')">
+      <div class="card-label">서울 전세</div>
+      <div class="card-value up" id="s2-seoul-val">+0.23%</div>
+      <div class="card-change" id="s2-seoul-chg">10년 만에 최고 상승률(2015.11 이후)</div>
+      <div class="card-note" id="s2-seoul-note">서울 25개 전 자치구 상승 '불장'<br>평균 전세 6.8억 역대 최고 경신 중</div>
+      <div class="card-badge badge-hot" id="s2-seoul-badge">역대 최고</div>
+    </div>
+    <div class="card amber" onclick="togglePanel('s2')">
+      <div class="card-label">서울 월세 비중</div>
+      <div class="card-value amber" id="s2-wolse-val">42.8%</div>
+      <div class="card-change" id="s2-wolse-chg">2020년 38.9% → 2025년 42.8%</div>
+      <div class="card-note" id="s2-wolse-note">전세→월세 전환 가속화<br>전국은 월세 56.5%로 이미 역전</div>
+    </div>
+    <div class="card blue" onclick="togglePanel('s2')">
+      <div class="card-label">수도권 전세</div>
+      <div class="card-value up" id="s2-metro-val">+0.17%</div>
+      <div class="card-change" id="s2-metro-chg">수도권 +0.17% · 지방 +0.04%</div>
+      <div class="card-note" id="s2-metro-note">5대광역시 +0.05% · 8개도 +0.03%</div>
+    </div>
+  </div>
+  <div class="expand-btn" onclick="togglePanel('s2')">상세 데이터 보기 <span class="arrow">▼</span></div>
+  <div class="detail-panel" id="panel-s2">
+    <div class="detail-content">
+      <table class="data-table" id="jeonseTableEl">
+        <thead><tr><th>지역</th><th>주간(%)</th><th>월간(%)</th><th>방향</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="chart-wrap">
+        <div class="chart-title">전세 vs 월세 비중 추이 (전국 기준)</div>
+        <canvas id="chartWolse" class="chart-canvas"></canvas>
+      </div>
+      <div class="insight-box" id="jeonseInsightEl"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 4: 수급 (STATIC) -->
+<div class="section">
+  <div class="section-title"><span class="section-num">04</span>수급 — 입주 물량 · 인허가</div>
+  <div class="card-row c3">
+    <div class="card blue">
+      <div class="card-label">서울 입주물량 (2026)</div>
+      <div class="card-value">9,640호</div>
+      <div class="card-change">수요 대비 21% 수준</div>
+      <div class="meter-wrap"><div class="meter-bar"><div class="meter-fill" style="width:21%;background:linear-gradient(90deg,#3B82F6,#60A5FA)"></div></div><div class="meter-labels"><span>0</span><span>수요 46,000호</span></div></div>
+    </div>
+    <div class="card green">
+      <div class="card-label">경기 입주물량 (2026)</div>
+      <div class="card-value">42,468호</div>
+      <div class="card-change">수요 대비 62% 수준</div>
+      <div class="meter-wrap"><div class="meter-bar"><div class="meter-fill" style="width:62%;background:linear-gradient(90deg,#10B981,#34D399)"></div></div><div class="meter-labels"><span>0</span><span>수요 68,500호</span></div></div>
+    </div>
+    <div class="card amber">
+      <div class="card-label">인천 입주물량 (2026)</div>
+      <div class="card-value">10,832호</div>
+      <div class="card-change">수요 대비 71% 수준</div>
+      <div class="meter-wrap"><div class="meter-bar"><div class="meter-fill" style="width:71%;background:linear-gradient(90deg,#F59E0B,#FBBF24)"></div></div><div class="meter-labels"><span>0</span><span>수요 15,300호</span></div></div>
+    </div>
+  </div>
+  <div class="expand-btn" onclick="togglePanel('s3')">공급 상세 보기 <span class="arrow">▼</span></div>
+  <div class="detail-panel" id="panel-s3">
+    <div class="detail-content">
+      <table class="data-table">
+        <thead><tr><th>지역</th><th>2024</th><th>2025</th><th>2026</th><th>2027E</th><th>2028E</th><th>연평균 수요</th></tr></thead>
+        <tbody>
+          <tr><td><strong>서울</strong></td><td>23,813</td><td>17,096</td><td>9,640</td><td>18,500</td><td>14,200</td><td>46,000</td></tr>
+          <tr><td>경기</td><td>85,225</td><td>62,380</td><td>42,468</td><td>55,000</td><td>48,000</td><td>68,500</td></tr>
+          <tr><td>인천</td><td>28,916</td><td>18,423</td><td>10,832</td><td>12,000</td><td>9,500</td><td>15,300</td></tr>
+          <tr><td>5대 광역시</td><td>62,100</td><td>48,500</td><td>35,200</td><td>32,000</td><td>28,500</td><td>55,000</td></tr>
+          <tr><td>기타 지방</td><td>45,800</td><td>38,200</td><td>28,600</td><td>25,000</td><td>22,000</td><td>40,000</td></tr>
+        </tbody>
+      </table>
+      <div class="chart-wrap">
+        <div class="chart-title">서울 인허가 vs 연평균 수요 (2016-2028)</div>
+        <canvas id="chartSupply" class="chart-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 5: 금리 · M2 -->
+<div class="section">
+  <div class="section-title"><span class="section-num">05</span>금리 · 유동성 · M2</div>
+  <div class="card-row c3">
+    <div class="card blue">
+      <div class="card-label">한국 기준금리</div>
+      <div class="card-value">2.50%</div>
+      <div class="card-change">미국 3.50~3.75% / 격차 -1.13%p</div>
+      <div class="card-note">내외금리차 역전 상태 지속</div>
+    </div>
+    <div class="card purple">
+      <div class="card-label">M2 광의통화</div>
+      <div class="card-value amber">4,618조</div>
+      <div class="card-change">2016년 대비 111%↑ vs GDP 39%↑</div>
+      <div class="card-note">M2-GDP 괴리 72p — 초과유동성 역대최고</div>
+    </div>
+    <div class="card amber">
+      <div class="card-label">주담대 금리</div>
+      <div class="card-value">4.29~4.34%</div>
+      <div class="card-change">고정 4.34% / 변동 4.29%</div>
+      <div class="card-note">금리인하 기대감 유지</div>
+    </div>
+  </div>
+  <div class="expand-btn" onclick="togglePanel('s4')">금리·M2 상세 보기 <span class="arrow">▼</span></div>
+  <div class="detail-panel" id="panel-s4">
+    <div class="detail-content">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="chart-wrap"><div class="chart-title">한미 기준금리 추이 (2016-2026)</div><canvas id="chartRate" class="chart-canvas"></canvas></div>
+        <div class="chart-wrap"><div class="chart-title">M2 vs 명목GDP 지수 (2016=100)</div><canvas id="chartM2" class="chart-canvas"></canvas></div>
+      </div>
+      <div style="margin-top:20px;font-size:13px;font-weight:700;color:#F8FAFC;margin-bottom:10px">금리 D-Day 일정</div>
+      <table class="sched-table" id="schedTableEl">
+        <thead><tr><th>회의</th><th>일자</th><th>D-Day</th><th>전망</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 6: 정치사이클 · 규제 (STATIC) -->
+<div class="section">
+  <div class="section-title"><span class="section-num">06</span>정치사이클 · 규제 타임라인</div>
+  <div id="timelineEl" class="timeline"></div>
+  <div class="expand-btn" onclick="togglePanel('s5')">규제 상세 보기 <span class="arrow">▼</span></div>
+  <div class="detail-panel" id="panel-s5">
+    <div class="detail-content">
+      <table class="reg-table">
+        <thead><tr><th>규제</th><th>시행일</th><th>핵심 내용</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr><td>토지거래허가제</td><td>2025.03.24</td><td>서울 강남·서초·송파·용산 + 10.15 서울 전역 확대</td><td><span class="reg-status reg-active">시행 중</span></td></tr>
+          <tr><td>양도세 중과 재시행</td><td>2025.05.10</td><td>조정대상지역 2주택 +20%p, 3주택 +30%p</td><td><span class="reg-status reg-active" id="regTaxStatus">시행 중</span></td></tr>
+          <tr><td>스트레스 DSR 3단계</td><td>2025.07 예정</td><td>은행+비은행 전체 적용, 실질 LTV 하락</td><td><span class="reg-status reg-pending">예정</span></td></tr>
+          <tr><td>주담대 한도 6억</td><td>시행 중</td><td>KB 기준 15억 이하 아파트에 실수요 집중</td><td><span class="reg-status reg-active">시행 중</span></td></tr>
+          <tr><td>분양가상한제</td><td>시행 중</td><td>서울 주요지역 적용, 신규 분양가 억제</td><td><span class="reg-status reg-active">시행 중</span></td></tr>
+          <tr><td>재건축 초과이익환수</td><td>시행 중</td><td>면제금액 상향에도 여전히 부담</td><td><span class="reg-status reg-active">시행 중</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 7: 시그널 -->
+<div class="section">
+  <div class="section-title"><span class="section-num">07</span>이번 주 핵심 시그널</div>
+  <div id="signalsEl"></div>
+</div>
+
+</div><!-- /container -->
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-brand">닥터마빈의 부동산 리포트</div>
+  <div class="footer-sub">데이터 출처: 한국부동산원, 한국은행, 국토교통부, KB부동산, 부동산R114<br>경계 데이터: southkorea-maps (KOSTAT 2013) · 지도 타일: CARTO / OpenStreetMap<br>&copy; 2026 닥터마빈. All rights reserved.</div>
+</div>
+
+<script>
+const SIGNAL_ICONS = {s1:"🔥",s2:"📌",s3:"⚡",s4:"🏠",s5:"💰"};
+const METRO_GEO = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"강동구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.11519584981606,37.557533180704915],[127.16683184366129,37.57672487388627],[127.18408792330152,37.55814280369575],[127.16530984307447,37.54221851258693],[127.14672806823502,37.51415680680291],[127.12123165719615,37.52528270089],[127.1116764203608,37.540669955324965],[127.11519584981606,37.557533180704915]]]}},{"type":"Feature","properties":{"name":"송파구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.0690698130372,37.522279423505026],[127.10087519791962,37.524841220167055],[127.1116764203608,37.540669955324965],[127.12123165719615,37.52528270089],[127.14672806823502,37.51415680680291],[127.1634944215765,37.497445406097484],[127.14206058413274,37.47089819098501],[127.12440571080893,37.46240445587048],[127.11117085201238,37.485708381512445],[127.0719146000724,37.50224013587669],[127.0690698130372,37.522279423505026]]]}},{"type":"Feature","properties":{"name":"강남구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.05867359288398,37.52629974922568],[127.0690698130372,37.522279423505026],[127.0719146000724,37.50224013587669],[127.11117085201238,37.485708381512445],[127.12440571080893,37.46240445587048],[127.09842759318751,37.45862253857461],[127.08640440578156,37.472697935184655],[127.0559170481904,37.4659228914077],[127.03621915098798,37.48175802427603],[127.01397119667513,37.52503988289669],[127.02302831890559,37.53231899582663],[127.05867359288398,37.52629974922568]]]}},{"type":"Feature","properties":{"name":"서초구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.01397119667513,37.52503988289669],[127.03621915098798,37.48175802427603],[127.0559170481904,37.4659228914077],[127.08640440578156,37.472697935184655],[127.09842759318751,37.45862253857461],[127.09046928565951,37.44296826114185],[127.06778107605433,37.426197424057314],[127.04957232987142,37.42805836845694],[127.03881782597922,37.45382039851715],[126.99072073195462,37.455326143310025],[126.98367668291802,37.473856492692086],[126.98223807916081,37.509314966770326],[127.01397119667513,37.52503988289669]]]}},{"type":"Feature","properties":{"name":"관악구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.98367668291802,37.473856492692086],[126.99072073195462,37.455326143310025],[126.96520439085143,37.438249784006246],[126.95000001010182,37.43613451165719],[126.9167728146601,37.45490566423789],[126.90156094129895,37.47753842789901],[126.90531975801812,37.48218087575429],[126.94922661389508,37.49125437495649],[126.9725891850662,37.472561363278125],[126.98367668291802,37.473856492692086]]]}},{"type":"Feature","properties":{"name":"동작구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.98223807916081,37.509314966770326],[126.98367668291802,37.473856492692086],[126.9725891850662,37.472561363278125],[126.94922661389508,37.49125437495649],[126.90531975801812,37.48218087575429],[126.92177893174825,37.494889877415176],[126.92810628828279,37.51329595732015],[126.95249990298159,37.51722500741813],[126.98223807916081,37.509314966770326]]]}},{"type":"Feature","properties":{"name":"영등포구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.89184663862764,37.547373974997114],[126.94566733083212,37.526617542453366],[126.95249990298159,37.51722500741813],[126.92810628828279,37.51329595732015],[126.92177893174825,37.494889877415176],[126.90531975801812,37.48218087575429],[126.89594776782485,37.504675281309176],[126.88156402353862,37.513970034765684],[126.88825757860099,37.54079733630232],[126.89184663862764,37.547373974997114]]]}},{"type":"Feature","properties":{"name":"금천구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.90156094129895,37.47753842789901],[126.9167728146601,37.45490566423789],[126.93084408056525,37.447382928333994],[126.9025831711697,37.434549366349124],[126.87683271502428,37.482576591607305],[126.90156094129895,37.47753842789901]]]}},{"type":"Feature","properties":{"name":"구로구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.82688081517314,37.50548972232896],[126.88156402353862,37.513970034765684],[126.89594776782485,37.504675281309176],[126.90531975801812,37.48218087575429],[126.90156094129895,37.47753842789901],[126.87683271502428,37.482576591607305],[126.84762676054953,37.47146723936323],[126.83549485076196,37.474098236975095],[126.82264796791348,37.4878476492147],[126.82504736331406,37.50302612640443],[126.82688081517314,37.50548972232896]]]}},{"type":"Feature","properties":{"name":"강서구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.79575768552907,37.57881087633202],[126.80702115023597,37.60123001013228],[126.82251438477105,37.5880430810082],[126.85984199399667,37.571847855292745],[126.89184663862764,37.547373974997114],[126.88825757860099,37.54079733630232],[126.86637464321238,37.54859191094823],[126.86610073476395,37.52699964144669],[126.84257291943153,37.52373707805596],[126.8242331426722,37.53788078753248],[126.77324417717703,37.5459123450554],[126.76979180579352,37.55139183008809],[126.79575768552907,37.57881087633202]]]}},{"type":"Feature","properties":{"name":"양천구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.8242331426722,37.53788078753248],[126.84257291943153,37.52373707805596],[126.86610073476395,37.52699964144669],[126.86637464321238,37.54859191094823],[126.88825757860099,37.54079733630232],[126.88156402353862,37.513970034765684],[126.82688081517314,37.50548972232896],[126.8242331426722,37.53788078753248]]]}},{"type":"Feature","properties":{"name":"마포구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.88433284773288,37.588143322880526],[126.93898161798973,37.552310003728124],[126.96358226710812,37.55605635475154],[126.96448570553055,37.548705692021635],[126.94566733083212,37.526617542453366],[126.89184663862764,37.547373974997114],[126.85984199399667,37.571847855292745],[126.88433284773288,37.588143322880526]]]}},{"type":"Feature","properties":{"name":"서대문구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.9524752030572,37.60508692737045],[126.95565425846463,37.576080790881456],[126.96873633279075,37.56313604690827],[126.96358226710812,37.55605635475154],[126.93898161798973,37.552310003728124],[126.90522065831053,37.57409700522574],[126.9524752030572,37.60508692737045]]]}},{"type":"Feature","properties":{"name":"은평구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.9738864128702,37.62949634786888],[126.95427017006129,37.622033431339425],[126.9524752030572,37.60508692737045],[126.90522065831053,37.57409700522574],[126.88433284773288,37.588143322880526],[126.90396681003595,37.59227403419942],[126.90303066177668,37.609977911401344],[126.91455481429648,37.64150050996935],[126.956473797387,37.652480737339445],[126.9738864128702,37.62949634786888]]]}},{"type":"Feature","properties":{"name":"노원구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.0838752703195,37.69359534202034],[127.09706391309695,37.686383719372294],[127.09440766298717,37.64713490473045],[127.11326795855199,37.639622905315925],[127.10782277688129,37.61804244241069],[127.07351243825278,37.61283660342313],[127.05209373568619,37.62164065487782],[127.04358800895609,37.62848931298715],[127.05800075220091,37.64318263878276],[127.05288479710485,37.68423857084347],[127.0838752703195,37.69359534202034]]]}},{"type":"Feature","properties":{"name":"도봉구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.05288479710485,37.68423857084347],[127.05800075220091,37.64318263878276],[127.04358800895609,37.62848931298715],[127.01465935892466,37.64943687496812],[127.02062116141389,37.667173575971205],[127.01039666042071,37.681894589603594],[127.01795099203432,37.69824412775662],[127.05288479710485,37.68423857084347]]]}},{"type":"Feature","properties":{"name":"강북구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.99383903424,37.676681761199085],[127.01039666042071,37.681894589603594],[127.02062116141389,37.667173575971205],[127.01465935892466,37.64943687496812],[127.05209373568619,37.62164065487782],[127.03892400992301,37.609715611023816],[127.0128154749523,37.613652243470256],[126.98672705513869,37.63377641288196],[126.9817452676551,37.65209769387776],[126.99383903424,37.676681761199085]]]}},{"type":"Feature","properties":{"name":"성북구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.977175406416,37.62859715400388],[126.98672705513869,37.63377641288196],[127.0128154749523,37.613652243470256],[127.03892400992301,37.609715611023816],[127.05209373568619,37.62164065487782],[127.07351243825278,37.61283660342313],[127.07382707099227,37.60401928986419],[127.042705222094,37.59239437593391],[127.02527254528003,37.57524616245249],[126.99348293358314,37.588565457216156],[126.98879865992384,37.6118927319756],[126.977175406416,37.62859715400388]]]}},{"type":"Feature","properties":{"name":"중랑구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.07351243825278,37.61283660342313],[127.10782277688129,37.61804244241069],[127.1201246020114,37.60178457598188],[127.10304174249214,37.57076342290955],[127.08068541280403,37.56906425519017],[127.07382707099227,37.60401928986419],[127.07351243825278,37.61283660342313]]]}},{"type":"Feature","properties":{"name":"동대문구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.02527254528003,37.57524616245249],[127.042705222094,37.59239437593391],[127.07382707099227,37.60401928986419],[127.08068541280403,37.56906425519017],[127.07421053024362,37.55724769712085],[127.05005601081567,37.567577612590846],[127.02547266349976,37.568943552237734],[127.02527254528003,37.57524616245249]]]}},{"type":"Feature","properties":{"name":"광진구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.08068541280403,37.56906425519017],[127.10304174249214,37.57076342290955],[127.11519584981606,37.557533180704915],[127.1116764203608,37.540669955324965],[127.10087519791962,37.524841220167055],[127.0690698130372,37.522279423505026],[127.05867359288398,37.52629974922568],[127.08068541280403,37.56906425519017]]]}},{"type":"Feature","properties":{"name":"성동구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.02547266349976,37.568943552237734],[127.05005601081567,37.567577612590846],[127.07421053024362,37.55724769712085],[127.05867359288398,37.52629974922568],[127.02302831890559,37.53231899582663],[127.01070894177482,37.54118048964762],[127.02547266349976,37.568943552237734]]]}},{"type":"Feature","properties":{"name":"용산구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.01070894177482,37.54118048964762],[127.02302831890559,37.53231899582663],[127.01397119667513,37.52503988289669],[126.98223807916081,37.509314966770326],[126.95249990298159,37.51722500741813],[126.94566733083212,37.526617542453366],[126.96448570553055,37.548705692021635],[126.98752996903328,37.55094818807139],[127.01070894177482,37.54118048964762]]]}},{"type":"Feature","properties":{"name":"중구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[127.02547266349976,37.568943552237734],[127.01070894177482,37.54118048964762],[126.98752996903328,37.55094818807139],[126.96448570553055,37.548705692021635],[126.96358226710812,37.55605635475154],[126.96873633279075,37.56313604690827],[127.02547266349976,37.568943552237734]]]}},{"type":"Feature","properties":{"name":"종로구","level":"gu","region":"서울"},"geometry":{"type":"Polygon","coordinates":[[[126.9738864128702,37.62949634786888],[126.977175406416,37.62859715400388],[126.98879865992384,37.6118927319756],[126.99348293358314,37.588565457216156],[127.02527254528003,37.57524616245249],[127.02547266349976,37.568943552237734],[126.96873633279075,37.56313604690827],[126.95565425846463,37.576080790881456],[126.9524752030572,37.60508692737045],[126.95427017006129,37.622033431339425],[126.9738864128702,37.62949634786888]]]}},{"type":"Feature","properties":{"name":"경기도","level":"province","region":"수도권"},"geometry":{"type":"MultiPolygon","coordinates":[[[[126.61008573442602,37.306167393816466],[126.58574903275343,37.29217550666709],[126.57228115152738,37.277020700754186],[126.59892279764671,37.259597173658065],[126.61085741498029,37.26020923045072],[126.62465751980164,37.233811135174314],[126.65235349060764,37.22264393610342],[126.64889918630573,37.207930698828584],[126.61368112611697,37.216188720612955],[126.60500555024011,37.20477933373152],[126.58721308391648,37.21775435465696],[126.57058155539166,37.201465573555126],[126.54646385167443,37.203507148693305],[126.54375626152584,37.22229105375655],[126.56255063829424,37.23941642337367],[126.56507568778636,37.25336773711857],[126.55067246350198,37.27712401335608],[126.56980468068642,37.27852471976882],[126.58105759518935,37.29313294195844],[126.61008573442602,37.306167393816466]]],[[[127.75008528185019,37.213836421895785],[127.73893911467121,37.20715818100084],[127.72876420310683,37.17997503571508],[127.72021915634166,37.1809569322586],[127.68862078647207,37.132173973373845],[127.63998974841665,37.138185031794315],[127.63326599469747,37.09343317591798],[127.6030399268905,37.082678177580455],[127.56834351978834,37.06015560619078],[127.56883364025329,37.044248102251665],[127.55489094842262,37.04147062893075],[127.51798604648654,37.05529903420788],[127.50143357933902,37.0449151486201],[127.48865259306719,37.05141401015867],[127.45985706269612,37.04073979999363],[127.46014553789564,37.017721496133056],[127.43189913130395,36.99902770813487],[127.39617029985955,36.99507985040399],[127.38707184090887,36.9815342938347],[127.40398967706481,36.964880923878944],[127.38065822539156,36.948596527237726],[127.35186324361375,36.94969761554877],[127.34555707624497,36.94142566452507],[127.31127137200359,36.92622202081569],[127.29192376988284,36.89094292878745],[127.27227784436901,36.910372298177904],[127.24613652477133,36.914531643323244],[127.22232389776461,36.927429809865],[127.20400548116044,36.94924588309504],[127.19222562527686,36.94998957487769],[127.14641025867189,36.968645768522045],[127.1323248556438,36.96238775245574],[127.11553676421077,36.96974725570875],[127.0760376848814,36.93552353196429],[127.06274059989018,36.93664873100583],[127.03383288543027,36.92546926498988],[126.99750165532961,36.9326477665848],[126.910836679272,36.90208156359326],[126.90658712061665,36.923113694550295],[126.88907059892044,36.933221090105434],[126.86630821336436,36.92982214707769],[126.86448993245831,36.945979456893284],[126.84836832894086,36.95655131645176],[126.82743835678815,36.98426258765902],[126.82629895899665,36.993103437294],[126.79968197956553,37.00517493163385],[126.7911381441893,37.02631450502602],[126.75308052059975,37.026393692156745],[126.75044219491762,37.046180069734056],[126.76341463106814,37.065226112503],[126.77231432456468,37.09998361927707],[126.76103369614258,37.1076759278731],[126.77081710910791,37.12505011030357],[126.79700626103114,37.126168608524104],[126.80659259646113,37.14862422374074],[126.7924343963167,37.17248103636921],[126.78005465697971,37.16183495525013],[126.7485923287427,37.16264235883018],[126.73014076991298,37.135914524465356],[126.69054868897561,37.11326932950787],[126.67514463498819,37.13507063805599],[126.68462906705025,37.14600860422268],[126.66271935009298,37.15926986130228],[126.66830194143522,37.20580829594158],[126.679454692167,37.2207607804071],[126.66659781009355,37.23395314434881],[126.68880404694775,37.25987648156399],[126.73610621063318,37.24751795580682],[126.75908526445852,37.25221652727888],[126.79144260183723,37.24154193488309],[126.79219095759062,37.264491606353886],[126.82781999859876,37.285982599748735],[126.8062601674049,37.2934261830191],[126.77466340204614,37.28657775165952],[126.72765029201186,37.29949771030921],[126.72487526779362,37.31058440846099],[126.69453406129928,37.331064777975385],[126.69051933679069,37.34603993198624],[126.70298843090731,37.352119573251315],[126.73861862034445,37.39261185826114],[126.75529287235136,37.4198421780779],[126.77110599940681,37.42452961096379],[126.78043371062365,37.448003437143655],[126.77019661935289,37.46883055261289],[126.744476678383,37.4838852371294],[126.74717949235365,37.511283448585516],[126.76227737901453,37.513622543389246],[126.76979180580942,37.55139182969442],[126.77324417747445,37.54591234511281],[126.82423314212201,37.537880787137944],[126.83054711454402,37.5239026146296],[126.8164974550688,37.490455809747786],[126.8241936572868,37.47295108095952],[126.84154264467277,37.472898041506305],[126.86985088116758,37.49097285653337],[126.904876280524,37.4312999637824],[126.9280955968551,37.44567023703391],[126.94152921836388,37.43315139631786],[126.96520439058375,37.43824978361244],[127.00552362664583,37.46445102854199],[127.01316256530455,37.452579065268665],[127.03881782627627,37.45382039812334],[127.03751805598364,37.43836279485156],[127.05424556065745,37.42574929829858],[127.06778107578614,37.42619742366374],[127.10032466818375,37.45598440156332],[127.11957248665733,37.459362173833945],[127.14857580326475,37.473813863432305],[127.16349442102577,37.49744540615507],[127.14208644755408,37.50578973788495],[127.16530984252344,37.54221851264452],[127.18116465912459,37.543841265878505],[127.18408792303336,37.55814280375301],[127.17607118401986,37.57678573921725],[127.10325742766358,37.55722517035663],[127.10355419752648,37.5810157087651],[127.12012460230933,37.60178457603841],[127.1101408494289,37.64185061395048],[127.09440766243473,37.647134904337165],[127.09706391339462,37.686383718978355],[127.08387527033378,37.69359534162663],[127.05225007316729,37.685101616435475],[127.01802453398156,37.69827593751291],[127.00999965881515,37.68190418817969],[126.99506026804494,37.67482788534259],[126.98174526738643,37.65209769393454],[126.98701141450073,37.6344502919925],[126.97733986817921,37.62858677056581],[126.94940373034049,37.65614597919233],[126.91455481374506,37.64150050957524],[126.90303066150814,37.60997791145795],[126.90396680948434,37.5922740342558],[126.87796615692943,37.576801333295336],[126.85302823381419,37.572824688428575],[126.8225143845036,37.58804308061408],[126.80759006980655,37.60089755085407],[126.79575768550734,37.5788108760036],[126.74570339074054,37.590557792234044],[126.72731286976551,37.58931897028113],[126.70070861454353,37.614673432609464],[126.65918008965976,37.63521787352189],[126.63835822767291,37.625009804250986],[126.62981867918448,37.604109873205516],[126.61067265869714,37.60100073501902],[126.57464273964032,37.58499252325506],[126.55623106967829,37.606512217134295],[126.55161765643402,37.62429855438714],[126.53101689694913,37.650190576980414],[126.53736405099187,37.66355136325615],[126.52504262043317,37.673736262550825],[126.52934206514162,37.70036377620938],[126.5205749742284,37.709951313930766],[126.52990629914359,37.745624912351815],[126.51662409598795,37.7641782229382],[126.53839072649511,37.76912862255904],[126.55721894225961,37.76621180135426],[126.56882602839734,37.75325654278405],[126.61153655781321,37.750136664526806],[126.6410143901002,37.775663495971806],[126.66423330825056,37.78738456911869],[126.67603874724725,37.82828427208909],[126.66227064201492,37.83606410328594],[126.69348896036473,37.8644295744041],[126.6738234616223,37.88401755795541],[126.67945067155478,37.89497402465704],[126.66763541567752,37.91838340630585],[126.67501771522767,37.952714953559536],[126.69257364873036,37.94114715112797],[126.71646858459351,37.93722236128669],[126.74668441652294,37.94913356858461],[126.74204629517135,37.96995265846346],[126.76520529782012,37.98230779965279],[126.78238542726378,37.980043640742196],[126.79848943554533,37.99094840411577],[126.83164256520793,37.99035429683395],[126.82523206504514,38.009133978219516],[126.83392985138158,38.03100700021759],[126.85568764173988,38.028736397646114],[126.87463524913098,38.01581963262512],[126.8825123717065,38.03641067362655],[126.89492205625899,38.048599999597776],[126.89538167386264,38.07164814207728],[126.8690446858055,38.0775824360857],[126.85234589299908,38.09221072387557],[126.82963500351813,38.075834790788775],[126.82361238457803,38.08545730337582],[126.79823368115979,38.079396242429205],[126.78709379588217,38.096266896388926],[126.75014823068967,38.1250727718476],[126.77187664078532,38.15202258732748],[126.82787908779657,38.19548697450825],[126.87506682923804,38.22035725338683],[126.89743330021047,38.201805215593154],[126.9278148098314,38.20085465468582],[126.95459011863893,38.207865227932665],[126.96711105566922,38.195060657059386],[126.98606173229147,38.209401424434695],[126.97740008407465,38.231360425325704],[126.9928631247504,38.23413162107449],[127.02801007444693,38.254549706330536],[127.07249919658952,38.26801218967687],[127.1114029797948,38.28932469840976],[127.11610682674736,38.26255766728667],[127.11224663881228,38.2394431208665],[127.13243748014303,38.22986476158472],[127.15063615744647,38.23979131545986],[127.1646162834598,38.22949766466786],[127.17168460782165,38.211127196944666],[127.16857086037805,38.19681089633364],[127.18150182400117,38.181927191582346],[127.19211744456844,38.15796313982426],[127.22539552077808,38.144128217478254],[127.25802935657717,38.160488799667334],[127.27319980966213,38.1790866530637],[127.29146727722234,38.174170762837136],[127.289370676864,38.14959749842669],[127.27790641984437,38.13449032099908],[127.28533797213613,38.11374536073075],[127.31342794937174,38.11323917818644],[127.3233289789755,38.09248746136886],[127.38575924847252,38.11165002147173],[127.40559230318657,38.10993516482188],[127.41499173689468,38.09933660665778],[127.43301729788502,38.112445246694456],[127.4431531330487,38.10543394023731],[127.44910733479269,38.068260739933685],[127.44585701335025,38.056270453927205],[127.46013793738422,38.0134860349293],[127.47430810806064,38.00331531716058],[127.50356426698077,37.99680815785573],[127.54178965519147,37.997835316077946],[127.54995046733652,37.97576098825456],[127.54648191778338,37.96536690043242],[127.60515472320132,37.95233960146551],[127.61592274593987,37.9366287310172],[127.61988365378565,37.90376621434755],[127.6032604878898,37.87185797534599],[127.58651354266917,37.87296654532723],[127.56458086845588,37.85271008496162],[127.53467866236306,37.839113410776555],[127.52780564568685,37.82059346512573],[127.53790811543986,37.80629714203576],[127.52374487243168,37.78856407636073],[127.5466892767123,37.75754789924914],[127.50979807708259,37.72791553214206],[127.54295591516946,37.71630823579963],[127.56455437188264,37.71825610136309],[127.55230133573117,37.68267686034289],[127.55496052178188,37.65875775799858],[127.53917031862451,37.64021056153019],[127.56113535854023,37.625656053534726],[127.58166701471585,37.63033393349653],[127.60450569092805,37.64854855203355],[127.6297203272341,37.63983122934362],[127.65553070993006,37.61954565096071],[127.69869383869498,37.59757031415434],[127.71028105512745,37.58360128643607],[127.75614914142567,37.589477424328045],[127.76838776708738,37.58017821619135],[127.79492564828544,37.582529783392495],[127.81507964044198,37.56183890182902],[127.85162642924534,37.55040744659168],[127.84457692996888,37.53621789705573],[127.8085597196858,37.53220450922161],[127.77611527653254,37.50328615723999],[127.77664798253399,37.488836359387506],[127.79833492164657,37.460500237927235],[127.80613393373571,37.42630019495342],[127.7967810228785,37.42143046813054],[127.78028546971915,37.38619013101883],[127.77952402155807,37.3684417894536],[127.76165381122894,37.36421925964658],[127.76193527302193,37.3272470885856],[127.77073902373827,37.30499906734768],[127.75697503303239,37.29496920987738],[127.76047537752132,37.25518935405223],[127.7510251151485,37.24464129202988],[127.75008528185019,37.213836421895785]]]]}},{"type":"Feature","properties":{"name":"인천광역시","level":"province","region":"수도권"},"geometry":{"type":"MultiPolygon","coordinates":[[[[126.0817177268215,37.10565069819013],[126.09089623356849,37.09208245351114],[126.07663417259401,37.08059285198784],[126.06218179296131,37.09322363587464],[126.0817177268215,37.10565069819013]]],[[[126.09918574128237,37.18418899324839],[126.11455156767539,37.16772511358294],[126.09602530185467,37.16412672039948],[126.09918574128237,37.18418899324839]]],[[[126.28942664894466,37.26953161705273],[126.31898245585842,37.260043498251626],[126.30604074589513,37.25051019642504],[126.28421352490467,37.26113009464647],[126.28942664894466,37.26953161705273]]],[[[126.10953559570788,37.27024985457202],[126.12094460465781,37.25518408413766],[126.14681447191721,37.235908208908484],[126.16258172110211,37.232525655486214],[126.1441350722084,37.21144713060318],[126.11938347002724,37.206453968556026],[126.11463733161148,37.21949424250424],[126.09327241601125,37.22707039945825],[126.09150081168539,37.24446823281798],[126.10953559570788,37.27024985457202]]],[[[126.47297642891262,37.28483327330461],[126.49135572725422,37.2804324329581],[126.503680686799,37.25543142128627],[126.48375730777757,37.24727612130905],[126.46029613899573,37.222776171436045],[126.43329710503706,37.23168128348476],[126.4398428264496,37.27007560683714],[126.47297642891262,37.28483327330461]]],[[[126.41372715664258,37.408564963505405],[126.44309032374386,37.3828303795049],[126.43701584399736,37.36763212840054],[126.41526595587268,37.363434747106886],[126.4014992263283,37.39837695856544],[126.41372715664258,37.408564963505405]]],[[[126.58063425789192,37.49845767298859],[126.58718713391254,37.48689054772081],[126.56915064005517,37.477323907056395],[126.54444687428905,37.4751229134956],[126.50940248858493,37.46300417847115],[126.49821934537691,37.445399289321884],[126.44386269459815,37.41807827355994],[126.42165506860408,37.418690086235635],[126.41763185952767,37.429656356588836],[126.39733473480013,37.44327842103585],[126.3740231472081,37.44472459379127],[126.35774365380226,37.46435392566334],[126.3754639767147,37.46932876288385],[126.4342236266762,37.50111907988644],[126.46659559995408,37.49667265695135],[126.48504193631899,37.5013984027136],[126.5004493917525,37.529050720206584],[126.5284007851184,37.524568796571984],[126.56756486584807,37.51184612415777],[126.58063425789192,37.49845767298859]]],[[[126.4634486333658,37.54166153983966],[126.47587225107775,37.534693105412984],[126.46908526167252,37.508273101851636],[126.43353567039735,37.522777104050704],[126.4634486333658,37.54166153983966]]],[[[126.31041466626111,37.55774018616852],[126.36271856489914,37.52787167223066],[126.33002026559856,37.52449359116182],[126.3308478757438,37.538273307614915],[126.31041466626111,37.55774018616852]]],[[[126.79575768550734,37.5788108760036],[126.76979180580942,37.55139182969442],[126.76227737901453,37.513622543389246],[126.74717949235365,37.511283448585516],[126.744476678383,37.4838852371294],[126.77019661935289,37.46883055261289],[126.78043371062365,37.448003437143655],[126.77110599940681,37.42452961096379],[126.75529287235136,37.4198421780779],[126.73861862034445,37.39261185826114],[126.73136678793315,37.38486525544913],[126.66313839794586,37.34042904068533],[126.61937239454821,37.34003140212719],[126.61383724104581,37.37088454146514],[126.60005463619866,37.3819409888124],[126.60007710729735,37.425548377056536],[126.59523234644573,37.460918733501295],[126.60645271622,37.49401011096293],[126.60476520792622,37.52501366426024],[126.60814622878723,37.551295199634794],[126.59540693078135,37.5565596153131],[126.57464273964032,37.58499252325506],[126.61067265869714,37.60100073501902],[126.62981867918448,37.604109873205516],[126.63835822767291,37.625009804250986],[126.65918008965976,37.63521787352189],[126.70070861454353,37.614673432609464],[126.72731286976551,37.58931897028113],[126.74570339074054,37.590557792234044],[126.79575768550734,37.5788108760036]]],[[[126.23496888542748,37.65370223688494],[126.25580127966876,37.65146200388461],[126.24791430146347,37.628203271397574],[126.22744452147647,37.64609960860516],[126.23496888542748,37.65370223688494]]],[[[125.71778562111626,37.67733189281434],[125.71240712157993,37.663468432269816],[125.68490357332955,37.650904527344615],[125.6854704061567,37.67845352661637],[125.71778562111626,37.67733189281434]]],[[[126.19730138348963,37.686265419177566],[126.21326810018003,37.66423170075228],[126.20679655459588,37.65347041940892],[126.17930601324812,37.66669782354731],[126.19730138348963,37.686265419177566]]],[[[126.33073420492528,37.74720622922485],[126.32264368234055,37.71333631857932],[126.34843739424609,37.696382240953476],[126.37397458252576,37.69244954824457],[126.37865615915672,37.66515226506815],[126.34485328553565,37.640796639654546],[126.32707361772874,37.63866028662858],[126.32886364247334,37.659244629986155],[126.31934571035976,37.678962501994285],[126.28717545791574,37.69345493270851],[126.27197250400802,37.70550985025192],[126.28681849521755,37.71488882784262],[126.29096407606248,37.741254443799185],[126.33073420492528,37.74720622922485]]],[[[126.26773983831974,37.81306258516622],[126.29494634183423,37.801605843637],[126.32968732055262,37.80194324034301],[126.33729393241845,37.79614546028495],[126.31886351836873,37.77170159516575],[126.29423251829581,37.76158711209261],[126.27357019153575,37.76727672607063],[126.24971058392852,37.762676620713655],[126.22883846137212,37.75021285852253],[126.20913257290285,37.76570894497188],[126.22419119706177,37.78815321684716],[126.2252108346344,37.80264777543127],[126.23901383339313,37.81364765383884],[126.26773983831974,37.81306258516622]]],[[[126.52807816917974,37.73531846920769],[126.5205749742284,37.709951313930766],[126.52934206514162,37.70036377620938],[126.52504262043317,37.673736262550825],[126.53736405099187,37.66355136325615],[126.53101689694913,37.650190576980414],[126.53258838663372,37.635767013511064],[126.54949503371687,37.602030693431985],[126.52600567755223,37.59367944192148],[126.51836631154609,37.576703496398636],[126.50252261403192,37.58742052882131],[126.48235260959414,37.58078836430121],[126.47539891630235,37.59469803670146],[126.43776080772018,37.58984047469607],[126.40577134827771,37.591308575568156],[126.37977037817814,37.60672557838479],[126.37404148022085,37.63025283357124],[126.40705057818506,37.647999492678416],[126.38881907964797,37.687496207085964],[126.35441741854022,37.7030335452616],[126.34522693143562,37.71782302379358],[126.34352734360029,37.745596907485],[126.35680744470484,37.7557616450251],[126.3509796830488,37.78920145056328],[126.37400958507159,37.80270796954416],[126.39592294117679,37.8227294651062],[126.43868529232597,37.82846854593709],[126.4667857500155,37.80219666566274],[126.5100975044148,37.78052999531703],[126.51444794130062,37.760766336521726],[126.52807816917974,37.73531846920769]]],[[[124.70862099779823,37.84414300741607],[124.72330843778242,37.8437456820496],[124.72244287297457,37.81368871136513],[124.71355502283454,37.804238057992904],[124.68552796265361,37.80258256589162],[124.68121650491112,37.81941005409517],[124.70862099779823,37.84414300741607]]],[[[124.68747919433376,37.97882109959671],[124.70753988173979,37.98148405834444],[124.7314165049446,37.9755247014439],[124.73281568087023,37.950992641468524],[124.70989140339972,37.94136448595187],[124.69758200749001,37.9133169048237],[124.63881174693722,37.92075751998738],[124.61330721873576,37.957841899556165],[124.61671157979492,37.9741728805783],[124.64010521789636,37.96639110395824],[124.68747919433376,37.97882109959671]]]]}}]};
+</script>
+<script>
+
+const TIMELINE_NODES = [
+  {id:"gov",label:"이재명 정부\n출범",date:"2025.01",status:"past"},
+  {id:"toher",label:"토허제\n강남4구",date:"2025.03",status:"past"},
+  {id:"rate1",label:"기준금리\n2.75→2.50",date:"2025.04",status:"past"},
+  {id:"ext",label:"토허제\n서울전역",date:"2025.04",status:"past"},
+  {id:"tax",label:"양도세\n중과 재시행",date:"2025.05.10",statusW7:"past",statusW6:"past",statusW5:"past",statusW4:"past",statusW3:"past",statusW2:"past",statusW1:"current"},
+  {id:"oil",label:"고유가\n지원금 2차",date:"2025.05.18",statusW7:"past",statusW6:"past",statusW5:"past",statusW4:"past",statusW3:"past",statusW2:"current",statusW1:"future"},
+  {id:"rate2",label:"금통위\n5.28",date:"2025.05.28",statusW7:"past",statusW6:"past",statusW5:"current",statusW4:"current",statusW3:"current",statusW2:"future",statusW1:"future"},
+  {id:"hold",label:"보유세\n기준일",date:"2025.06.01",statusW7:"past",statusW6:"current",statusW5:"future",statusW4:"future",statusW3:"future",statusW2:"future",statusW1:"future"},
+  {id:"elect",label:"지방선거",date:"2025.06.03",statusW7:"past",statusW6:"future",statusW5:"future",statusW4:"future",statusW3:"future",statusW2:"future",statusW1:"future"},
+  {id:"dsr3",label:"스트레스\nDSR 3단계",date:"2025.07",statusW7:"future",statusW6:"future",statusW5:"future",statusW4:"future",statusW3:"future",statusW2:"future",statusW1:"future"},
+  {id:"extra",label:"추가대책\n가능성",date:"2025.H2",statusW7:"future",statusW6:"future",statusW5:"future",statusW4:"future",statusW3:"future",statusW2:"future",statusW1:"future"}
+];
+
+
+const WEEKS = {
+  "w7": {
+    label:"6월 2주", basis:"6월1주(6.8) 기준",
+    ticker:{krRate:"2.50%",usRate:"3.50~3.75%",gap:"-1.13%p",mortgage:"4.40%",m2:"4,685조",listing:"57,000건",listingChg:"▼ 전주 -2.6%",taxStatus:"시행 중",taxChg:"8회 연속 동결"},
+    trade:{
+      nation:{val:"+0.08%",chg:"전주 대비 ▲ (소폭 확대)",note:"전월 대비 +0.40% · 전년동월 대비 +2.4%",badge:"상승 유지"},
+      seoul:{val:"+0.27%",chg:"69주 연속 상승 · 상승폭 확대",note:"강서 +0.42% 서울 1위<br>비강남 전역 '키맞추기 장세'",badge:"69주 연속 상승"},
+      metro:{val:"+0.16%",chg:"동탄 +1.98% 전국 1위 급등",note:"성남 +0.55% · 구리 +0.33%"},
+      local:{val:"0.00%",chg:"보합",note:"5대광역시 -0.02% · 8개도 +0.01%"}
+    },
+    tradeTable:[
+      {region:"전국",rate:"+0.08",monthly:"+0.32",dir:"▲",note:"상승 유지"},
+      {region:"<strong>서울</strong>",rate:"+0.27",monthly:"+1.08",dir:"▲",note:"69주 연속 상승"},
+      {region:"수도권",rate:"+0.16",monthly:"+0.64",dir:"▲",note:"동탄 +1.98% 급등"},
+      {region:"지방",rate:"0.00",monthly:"0.00",dir:"-",note:"보합"},
+      {region:"5대 광역시",rate:"-0.02",monthly:"-0.08",dir:"▼",note:""},
+      {region:"8개도 지역",rate:"+0.01",monthly:"+0.04",dir:"▲",note:""}
+    ],
+    seoulDetail:[
+      {zone:"키맞추기 확산",area:"강서구",rate:"+0.42",zoneColor:"#10B981",desc:"서울 1위, 누적 6.65%"},
+      {zone:"",area:"구로구",rate:"+0.40",desc:"서부권 상승 확산"},
+      {zone:"",area:"도봉구",rate:"+0.39",desc:"강북 중저가 지속 강세"},
+      {zone:"",area:"동대문구",rate:"+0.39",desc:"2주 연속 상위권"},
+      {zone:"중위권 상승",area:"성북구",rate:"+0.35",zoneColor:"#3B82F6",desc:"중저가 매물 흡수"},
+      {zone:"",area:"은평구",rate:"+0.33",desc:"비강남 확산 수혜"},
+      {zone:"",area:"송파구",rate:"+0.33",desc:"강남권 유일 강세"},
+      {zone:"",area:"광진구",rate:"+0.32",desc:"성동 인접 수혜"},
+      {zone:"",area:"중랑구",rate:"+0.31",desc:"동북권 확산"},
+      {zone:"",area:"영등포구",rate:"+0.31",desc:"여의도 주도 유지"}
+    ],
+    tradeInsight:{title:"핵심 해석 — 69주 연속 상승, '키맞추기' 장세 전면화",body:"서울 매매 <strong>+0.27%로 69주 연속 상승</strong>, 전주(0.25%) 대비 상승폭 확대. <strong>강서구(+0.42%, 누적 6.65%)가 서울 1위</strong>로 올라서며, 구로(+0.40%)·도봉(+0.39%)·동대문(+0.39%) 등 비강남권 전역으로 '키맞추기' 확산. 경기 동탄 <strong>+1.98%로 전국 1위 급등</strong>(누적 7.19%). 정부의 보유세 인상 등 <strong>규제 강화 예고에도 불구하고</strong> 매물 부족이 상승 모멘텀을 지탱"},
+    jeonse:{
+      nation:{val:"+0.12%",chg:"전주 대비 소폭 축소",note:"전월 +0.52% · 전년동월 대비 +3.2%"},
+      seoul:{val:"+0.28%",chg:"소폭 축소 (0.29→0.28%)",note:"누적 +4.05% — 4% 돌파<br>25개 전 자치구 상승 지속",badge:"누적 4.05%"},
+      wolse:{val:"44.0%",chg:"2020년 38.9% → 2026년 44.0%",note:"전세→월세 전환 가속<br>전국 월세 57.5%"},
+      metro:{val:"+0.18%",chg:"수도권 +0.18% · 지방 +0.04%",note:"5대광역시 +0.05% · 8개도 +0.04%"}
+    },
+    jeonseTable:[
+      {region:"전국",rate:"+0.12",monthly:"+0.48",dir:"▲"},
+      {region:"<strong>서울</strong>",rate:"+0.28",monthly:"+1.12",dir:"▲"},
+      {region:"수도권",rate:"+0.18",monthly:"+0.72",dir:"▲"},
+      {region:"지방",rate:"+0.04",monthly:"+0.16",dir:"▲"},
+      {region:"5대 광역시",rate:"+0.05",monthly:"+0.20",dir:"▲"},
+      {region:"8개도 지역",rate:"+0.04",monthly:"+0.16",dir:"▲"}
+    ],
+    jeonseInsight:{title:"전세 +0.28% — 누적 4.05%, 역대급 상승세 지속",body:"서울 전세 <strong>+0.28%로 소폭 축소(0.29→0.28%)</strong>됐으나 여전히 역대급 수준. 올해 누적 상승률 <strong>+4.05%로 4% 돌파</strong>. 25개 전 자치구 상승이 지속되며, 매물 부족과 입주물량 급감이 맞물려 <strong>전세 불안 장기화</strong> 구조. FOMC(6.17) 결과와 7월 금통위가 금리 방향성의 분기점이 될 전망"},
+    schedule:[
+      {name:"FOMC",date:"2026-06-17",dday:"D+9",outlook:"동결 전망"},
+      {name:"금통위",date:"2026-07-09",dday:"D+31",outlook:"인하 가능"},
+      {name:"FOMC",date:"2026-07-29",dday:"D+51",outlook:"인하 관망"},
+      {name:"스트레스DSR 3단계",date:"2026-07",dday:"D+22~",outlook:"시행 예정"}
+    ],
+    signals:[
+      {icon:"s1",num:1,title:"69주 연속 상승 — '키맞추기' 장세 전면화",body:"서울 매매가격이 <strong>+0.27%로 69주 연속 상승</strong>, 전주(0.25%) 대비 상승폭 확대. <strong>강서구(+0.42%, 누적 6.65%)</strong>가 서울 1위로 올라서며 구로(+0.40%)·도봉(+0.39%)·동대문(+0.39%) 등 <strong>비강남권 전역으로 상승 확산</strong>. 강남구(+0.25%)도 견조한 상승 유지. 정부 보유세 인상 예고에도 매물 57,000건 부족이 상승 압력을 지탱하는 구조"},
+      {icon:"s2",num:2,title:"동탄 +1.98% 전국 1위 급등 — 반도체 벨트 수혜",body:"경기 화성 동탄이 <strong>+1.98%로 전국 1위 급등</strong>(누적 7.19%). 삼성전자 반도체 클러스터 확장에 따른 수혜가 본격화. 성남(+0.55%)·구리(+0.33%)도 동반 상승하며 <strong>수도권 +0.16%</strong>으로 확대. 서울→경기 확산 흐름이 뚜렷해지면서 수도권 전역의 상승 장세로 전환되는 양상"},
+      {icon:"s4",num:3,title:"전세 누적 4.05% 돌파 — 역대급 불안 장기화",body:"서울 전세 <strong>+0.28%로 올해 누적 4.05%</strong>, 4% 벽을 돌파. 25개 전 자치구 상승이 지속되며, <strong>2026년 입주물량 48% 급감</strong>이 핵심 원인. 전세→월세 전환도 가속화(서울 44.0%, 전국 57.5%)되면서 전세 시장 구조적 불안 장기화. <strong>FOMC(6.17)와 7월 금통위</strong>가 금리 방향성의 분기점"},
+      {icon:"s5",num:4,title:"이재명 정부 규제 강화 예고 + FOMC D+9",body:"이재명 대통령이 <strong>보유세 인상 등 더 강력한 규제를 예고</strong>하면서 시장에 긴장감 고조. 양도세 중과(82.5%)에 이어 보유세까지 강화되면 다주택자 부담이 극대화. 6.17 FOMC(D+9)에서 <strong>미국 동결 전망</strong>이 우세하며, 한미 금리차(-1.13%p) 유지 전망. M2 4,685조로 사상 최고 경신 중, <strong>규제 강화에도 초과 유동성이 수도권 부동산에 집중</strong>되는 구조 지속"}
+    ]
+  },
+  "w6": {
+    label:"6월 1주", basis:"5월5주(6.1) 기준",
+    ticker:{krRate:"2.50%",usRate:"3.50~3.75%",gap:"-1.13%p",mortgage:"4.38%",m2:"4,670조",listing:"58,500건",listingChg:"▼ 전주 -2.8%",taxStatus:"시행 중",taxChg:"8회 연속 동결"},
+    trade:{
+      nation:{val:"+0.07%",chg:"전주 대비 ▲ (소폭 축소)",note:"전월 대비 +0.40% · 전년동월 대비 +2.4%",badge:"소폭 축소"},
+      seoul:{val:"+0.25%",chg:"68주 연속 상승 · 2주 연속 0.25%",note:"비강남권 주도 상승 지속<br>동대문 +0.37% 서울 1위",badge:"68주 연속 상승"},
+      metro:{val:"+0.14%",chg:"수도권 +0.14% · 경기 +0.12%",note:"인천 +0.02% 보합 수준"},
+      local:{val:"0.00%",chg:"보합",note:"5대광역시 -0.02% · 8개도 +0.01%"}
+    },
+    tradeTable:[
+      {region:"전국",rate:"+0.07",monthly:"+0.28",dir:"▲",note:"소폭 축소"},
+      {region:"<strong>서울</strong>",rate:"+0.25",monthly:"+1.00",dir:"▲",note:"68주 연속 상승"},
+      {region:"수도권",rate:"+0.14",monthly:"+0.56",dir:"▲",note:""},
+      {region:"지방",rate:"0.00",monthly:"0.00",dir:"-",note:"보합 전환"},
+      {region:"5대 광역시",rate:"-0.02",monthly:"-0.08",dir:"▼",note:""},
+      {region:"8개도 지역",rate:"+0.01",monthly:"+0.04",dir:"▲",note:""}
+    ],
+    seoulDetail:[
+      {zone:"비강남권 강세",area:"동대문구",rate:"+0.37",zoneColor:"#10B981",desc:"15억 이하 실수요 집중 지속"},
+      {zone:"",area:"성동구",rate:"+0.35",desc:"강남4구 수요 우회 유입"},
+      {zone:"",area:"강북구",rate:"+0.35",desc:"중저가 키맞추기 지속"},
+      {zone:"",area:"성북구",rate:"+0.34",desc:"중저가 매물 흡수"},
+      {zone:"외곽·서부권 확대",area:"중구",rate:"+0.31",zoneColor:"#3B82F6",desc:"상승세 유지"},
+      {zone:"",area:"강서구",rate:"+0.31",desc:"서부권 확대 시작"},
+      {zone:"",area:"영등포구",rate:"+0.31",desc:"여의도 주도 상승"},
+      {zone:"",area:"송파구",rate:"+0.28",desc:"전주 수준 유지"},
+      {zone:"",area:"구로구",rate:"+0.27",desc:"매물 감소 지속"},
+      {zone:"",area:"동작구",rate:"+0.25",desc:"중가 아파트 상승"}
+    ],
+    tradeInsight:{title:"핵심 해석 — 68주 연속 상승, 비강남권 주도 장세 지속",body:"서울 매매 <strong>+0.25%로 68주 연속 상승</strong>, 2주 연속 동일 상승률 유지. 동대문(+0.37%)·성동(+0.35%)·강북(+0.35%) 등 <strong>비강남권이 상승 주도</strong>. 6.1 보유세 기준일 도래로 매도 관망 심화되면서 매물 58,500건으로 추가 감소. <strong>정부 규제 강화 기조에도 불구하고</strong> 매물 부족이 상승 기조를 지탱하는 구조"},
+    jeonse:{
+      nation:{val:"+0.13%",chg:"전주 대비 ▲ 확대",note:"전월 +0.52% · 전년동월 +3.0%"},
+      seoul:{val:"+0.29%",chg:"전주 대비 확대 (0.26→0.29%)",note:"누적 +3.77% (전년 동기 6배)<br>송파 +0.50% 전세 1위",badge:"누적 3.77%"},
+      wolse:{val:"43.8%",chg:"2020년 38.9% → 2026년 43.8%",note:"전세→월세 전환 지속<br>전국 월세 57.2%"},
+      metro:{val:"+0.18%",chg:"수도권 +0.18% · 지방 +0.05%",note:"5대광역시 +0.06% · 8개도 +0.04%"}
+    },
+    jeonseTable:[
+      {region:"전국",rate:"+0.13",monthly:"+0.52",dir:"▲"},
+      {region:"<strong>서울</strong>",rate:"+0.29",monthly:"+1.16",dir:"▲"},
+      {region:"수도권",rate:"+0.18",monthly:"+0.72",dir:"▲"},
+      {region:"지방",rate:"+0.05",monthly:"+0.20",dir:"▲"},
+      {region:"5대 광역시",rate:"+0.06",monthly:"+0.24",dir:"▲"},
+      {region:"8개도 지역",rate:"+0.04",monthly:"+0.16",dir:"▲"}
+    ],
+    jeonseInsight:{title:"전세 +0.29% — 전주 대비 확대, 누적 3.77%",body:"서울 전세 <strong>+0.29%로 전주(0.26%) 대비 확대</strong>. 올해 누적 상승률 +3.77%로 전년 동기(0.65%)의 약 6배. 송파(+0.50%)·성동(+0.48%)·도봉(+0.47%)이 상승 주도. <strong>6.1 보유세 기준일 도래로 임대인 매도 관망</strong>이 강화되면서 전세 매물 추가 감소. 입주물량 급감과 맞물려 <strong>하반기 전세 불안 장기화</strong> 우려"},
+    schedule:[
+      {name:"보유세 기준일",date:"2026-06-01",dday:"D-DAY",outlook:"오늘! 보유 확정"},
+      {name:"지방선거",date:"2026-06-03",dday:"D+2",outlook:"정부 규제 강화 기조"},
+      {name:"FOMC",date:"2026-06-17",dday:"D+16",outlook:"동결 전망"},
+      {name:"금통위",date:"2026-07-09",dday:"D+38",outlook:"인하 가능"}
+    ],
+    signals:[
+      {icon:"s2",num:1,title:"68주 연속 상승 — 비강남권 주도, 상승 기조 견고",body:"서울 매매가격이 <strong>+0.25%로 68주 연속 상승</strong>, 2주 연속 동일 상승률 유지. 동대문(+0.37%)·성동(+0.35%)·강북(+0.35%) 등 비강남권이 상승 주도. <strong>양도세 중과 재시행 한 달 경과</strong> 후에도 매물 부족→호가 상승 구조가 고착화되면서 하락 전환 가능성은 낮은 상황"},
+      {icon:"s1",num:2,title:"6.1 보유세 기준일 도래 — 매도 관망 강화, 매물 추가 감소",body:"<strong>6월 1일 보유세 기준일</strong>이 도래하면서 이날 기준 보유자에게 재산세·종부세 부과 확정. 서울 공시가격 18.6% 상승으로 보유세 부담이 대폭 증가했으나, <strong>양도세 중과(82.5%)로 매도가 더 큰 부담</strong>이라 매물 잠김 지속. 매물 58,500건으로 추가 감소하며 <strong>6만건 붕괴 확인</strong>"},
+      {icon:"s4",num:3,title:"전세 +0.29%, 누적 3.77% — 전년 동기의 6배 상승",body:"서울 전세 <strong>+0.29%로 전주(0.26%) 대비 확대</strong>. 올해 누적 +3.77%로 전년 동기(0.65%)의 약 6배 수준. 송파(+0.50%)·성동(+0.48%)·도봉(+0.47%) 등 <strong>강북·동남권이 전세 상승 주도</strong>. 보유세 기준일 도래로 임대인 매도 관망이 강화되면서 전세 매물 추가 감소 전망"},
+      {icon:"s5",num:4,title:"정부 규제 강화 기조 + M2 4,670조 — 규제 vs 유동성",body:"이재명 정부가 <strong>보유세 인상 등 더 강력한 규제를 예고</strong>하면서 시장에 경고 시그널. 양도세 중과에 이어 보유세까지 강화 카드를 꺼내며 다주택자 압박 강화. M2 광의통화 <strong>4,670조원으로 사상 최고 경신</strong> 중. 한미 금리차 -1.13%p 유지, 주담대 4.38%로 소폭 상승. <strong>규제 강화에도 유동성 과잉 구조가 상승을 지탱</strong>"}
+    ]
+  },
+  "w5": {
+    label:"5월 5주", basis:"5월4주(5.25) 기준",
+    ticker:{krRate:"2.50%",usRate:"3.50~3.75%",gap:"-1.13%p",mortgage:"4.36%",m2:"4,655조",listing:"60,200건",listingChg:"▼ 전주 -3.1%",taxStatus:"시행 중",taxChg:"8회 연속 동결"},
+    trade:{
+      nation:{val:"+0.08%",chg:"전주 대비 ▲ (상승폭 소폭 축소)",note:"전월 대비 +0.36% · 전년동월 대비 +2.2%",badge:"소강국면"},
+      seoul:{val:"+0.25%",chg:"19주 연속 상승 · 4주 만에 둔화",note:"높아진 호가에 수요 관망 시작<br>중구 +0.41% 확대 vs 대부분 축소",badge:"4주 만에 둔화"},
+      metro:{val:"+0.18%",chg:"서울 둔화 + 동탄 +0.49% 급등",note:"반도체 벨트 수혜 지역 부각"},
+      local:{val:"-0.01%",chg:"▼ 하락 지속",note:"5대광역시 -0.01% · 8개도 +0.01%"}
+    },
+    tradeTable:[
+      {region:"전국",rate:"+0.08",monthly:"+0.36",dir:"▲",note:"상승폭 소폭 축소"},
+      {region:"<strong>서울</strong>",rate:"+0.25",monthly:"+1.00",dir:"▲",note:"4주 만에 상승폭 둔화"},
+      {region:"수도권",rate:"+0.18",monthly:"+0.72",dir:"▲",note:"동탄·처인구 급등"},
+      {region:"지방",rate:"-0.01",monthly:"-0.04",dir:"▼",note:"미분양 누적 지속"},
+      {region:"5대 광역시",rate:"-0.01",monthly:"-0.04",dir:"▼",note:""},
+      {region:"8개도 지역",rate:"+0.01",monthly:"+0.04",dir:"▲",note:""}
+    ],
+    seoulDetail:[
+      {zone:"상승폭 확대",area:"중구",rate:"+0.41",zoneColor:"#10B981",desc:"유일하게 상승폭 확대 (0.22→0.41)"},
+      {zone:"",area:"강북구",rate:"+0.42",desc:"여전히 높은 상승률 유지"},
+      {zone:"",area:"도봉구",rate:"+0.34",desc:"중저가 매물 흡수 지속"},
+      {zone:"",area:"송파구",rate:"+0.28",desc:"급등 후 소폭 둔화 (0.38→0.28)"},
+      {zone:"상승폭 축소",area:"마포구",rate:"+0.24",zoneColor:"#F59E0B",desc:"소폭 확대 유지"},
+      {zone:"",area:"노원구",rate:"+0.25",desc:"둔화 (0.32→0.25)"},
+      {zone:"",area:"서초구",rate:"+0.20",desc:"둔화 (0.26→0.20)"},
+      {zone:"",area:"강남구",rate:"+0.14",desc:"둔화 (0.20→0.14)"},
+      {zone:"",area:"금천구",rate:"+0.13",desc:"유지 (0.13→0.13)"}
+    ],
+    tradeInsight:{title:"핵심 해석 — 4주 만에 둔화, 소강국면 진입",body:"서울 매매 <strong>+0.25%로 4주 만에 상승폭이 축소</strong>되며 소강국면에 진입. 높아진 호가에 수요가 관망하면서 대부분 자치구의 상승폭이 줄었으나, <strong>중구(+0.41%)만 유일하게 확대</strong>. 강남구(0.20→0.14%)·서초구(0.26→0.20%)·송파구(0.38→0.28%) 강남3구 모두 둔화. 다만 <strong>매물 부족 구조는 여전</strong>하여 하락 전환보다는 '숨 고르기'로 해석. 반도체 벨트 동탄(+0.49%)이 수도권 최고 상승률 기록"},
+    jeonse:{
+      nation:{val:"+0.11%",chg:"전주 대비 ▲ (소폭 축소)",note:"전월 +0.48% · 전년동월 +2.9%"},
+      seoul:{val:"+0.26%",chg:"4주 만에 둔화 · 역대 최고 수준 유지",note:"25개 자치구 상승 지속<br>전세수급지수 105.0 유지",badge:"역대급 유지"},
+      wolse:{val:"43.5%",chg:"2020년 38.9% → 2025년 42.8% → 43.5%",note:"전세→월세 전환 지속<br>전국 월세 57.0%"},
+      metro:{val:"+0.17%",chg:"수도권 +0.17% · 지방 +0.04%",note:"5대광역시 +0.05% · 8개도 +0.03%"}
+    },
+    jeonseTable:[
+      {region:"전국",rate:"+0.11",monthly:"+0.48",dir:"▲"},
+      {region:"<strong>서울</strong>",rate:"+0.26",monthly:"+1.04",dir:"▲"},
+      {region:"수도권",rate:"+0.17",monthly:"+0.68",dir:"▲"},
+      {region:"지방",rate:"+0.04",monthly:"+0.16",dir:"▲"},
+      {region:"5대 광역시",rate:"+0.05",monthly:"+0.20",dir:"▲"},
+      {region:"8개도 지역",rate:"+0.03",monthly:"+0.12",dir:"▲"}
+    ],
+    jeonseInsight:{title:"전세 +0.26% — 4주 만에 소폭 둔화, 여전히 역대급",body:"서울 전세 <strong>+0.26%로 4주 만에 소폭 둔화</strong>했으나 여전히 역대급 수준. 전세수급지수 105.0으로 수요>>>공급 구조 지속. 5.28 금통위 동결(8회 연속)로 금리 인하 기대감이 약해지면서 전세→매매 갈아타기 수요도 일부 관망. 다만 <strong>입주물량 급감(48%)과 매물 부족</strong>이라는 구조적 요인이 바뀌지 않아 전세 불안은 지속 전망"},
+    schedule:[
+      {name:"금통위 결과",date:"2026-05-28",dday:"D-3",outlook:"2.50% 동결 (8회 연속)"},
+      {name:"보유세 기준일",date:"2026-06-01",dday:"D+0",outlook:"오늘! 보유 확정"},
+      {name:"지방선거",date:"2026-06-03",dday:"D+2",outlook:"정부 규제 강화 기조"},
+      {name:"FOMC",date:"2026-06-17",dday:"D+16",outlook:"동결 전망"}
+    ],
+    signals:[
+      {icon:"s2",num:1,title:"서울 +0.25% 4주 만에 둔화 — '숨 고르기' 국면",body:"서울 매매가격이 <strong>+0.25%로 4주 만에 상승폭이 축소</strong>. 5월 들어 +0.15%→+0.28%→+0.31%→+0.25%로 3주 가속 후 첫 둔화. 높아진 호가에 수요가 관망하면서 소강국면에 진입. 다만 <strong>매물 부족 구조가 여전</strong>하여 하락 전환보다는 숨 고르기로 해석. 중구(+0.41%)만 유일하게 상승폭 확대, 반도체 벨트 동탄(+0.49%)이 수도권 최고 상승률 기록"},
+      {icon:"s1",num:2,title:"5.28 금통위 — 8회 연속 동결, 매파적 기조 확인",body:"한국은행이 기준금리를 <strong>2.50%로 8회 연속 동결</strong>. 서울 집값 급등(5월 올해 최고)과 공시가격 18.6% 상승에 대한 <strong>경계감이 반영된 매파적 동결</strong>. 인상 소수의견 가능성도 시장에서 주목. 주담대 금리 4.36%로 2년4개월 최고 수준, 대출 규제 기조 유지로 <strong>규제 속 양극화</strong>가 지속되는 구조"},
+      {icon:"s4",num:3,title:"6.1 보유세 기준일 — 오늘 보유 확정, 매물 변화 관건",body:"<strong>6월 1일 보유세 기준일</strong>이 도래. 이 날 기준 주택 보유자에게 재산세·종부세가 부과됨. 서울 공시가격 18.6% 상승으로 보유세 부담이 대폭 증가. 5.29(금)까지 잔금 완료한 매도자만 보유세 회피 가능했으나, <strong>양도세 중과(82.5%)로 매도 자체가 어려운 상황</strong>. 6.3 지방선거를 앞두고 정부의 추가 규제 강화 방향도 주목 포인트"},
+      {icon:"s3",num:4,title:"매물 6만건 붕괴 임박 — 구조적 부족 장기화",body:"서울 아파트 매물이 <strong>약 60,200건으로 6만건 붕괴 임박</strong>. 양도세 중과 재시행(5.10) 이후 약 3주간 매물이 12,000건 이상 증발. 매물 잠김→호가 상승→수요 관망의 순환이 형성되면서, <strong>거래량은 줄지만 가격은 유지</strong>되는 전형적인 공급 부족 장세. 2026년 입주물량 48% 급감과 맞물려 하반기 매물 부족 심화 전망"},
+      {icon:"s5",num:5,title:"5월 서울 아파트 월간 +0.83% — 67주 연속 상승",body:"5월 한 달간 서울 아파트 매매가격이 <strong>+0.83% 상승하며 67주 연속 상승</strong> 행진 기록. 매매가격 전망지수는 2개월째 기준선(100)을 상회하며 <strong>'앞으로도 오를 것'이라는 기대</strong>가 확산. 6~7월 입주물량 감소와 매물 부족이 맞물려 상승 모멘텀이 이어질 가능성. 다만 정부 보유세 인상 등 규제 강화 예고가 변수. 반면 주담대 4.36%, 매파적 금통위 등 제동 요인도 상존"}
+    ]
+  },
+  "w4": {
+    label:"5월 4주", basis:"5월3주(5.18) 기준",
+    ticker:{krRate:"2.50%",usRate:"3.50~3.75%",gap:"-1.13%p",mortgage:"4.34%",m2:"4,640조",listing:"62,100건",listingChg:"▼ 전주 -5.5%",taxStatus:"시행 중",taxChg:"매물 잠김 심화"},
+    trade:{
+      nation:{val:"+0.10%",chg:"전주 대비 ▲ 상승폭 확대",note:"전월 대비 +0.40% · 전년동월 대비 +2.3%",badge:"상승 가속"},
+      seoul:{val:"+0.31%",chg:"18주 연속 · 올해 최고 상승률",note:"25개구 전역 상승 · 3주 연속 상승폭 확대<br>성북 +0.49% 역대급, 송파 +0.38% 급등",badge:"올해 최고"},
+      metro:{val:"+0.22%",chg:"서울 확산 + 경기 동반 상승",note:"수도권 전역 매물 부족 현상"},
+      local:{val:"-0.01%",chg:"▼ 하락 지속",note:"5대광역시 -0.01% · 8개도 +0.01%"}
+    },
+    tradeTable:[
+      {region:"전국",rate:"+0.10",monthly:"+0.40",dir:"▲",note:"3주 연속 상승폭 확대"},
+      {region:"<strong>서울</strong>",rate:"+0.31",monthly:"+1.24",dir:"▲",note:"올해 최고, 25개구 전역 상승"},
+      {region:"수도권",rate:"+0.22",monthly:"+0.88",dir:"▲",note:"서울 확산 + 경기 동반"},
+      {region:"지방",rate:"-0.01",monthly:"-0.04",dir:"▼",note:"미분양 누적 지속"},
+      {region:"5대 광역시",rate:"-0.01",monthly:"-0.04",dir:"▼",note:""},
+      {region:"8개도 지역",rate:"+0.01",monthly:"+0.04",dir:"▲",note:""}
+    ],
+    seoulDetail:[
+      {zone:"역대급 상승",area:"성북구",rate:"+0.49",zoneColor:"#10B981",desc:"2주 연속 역대급, 실수요 집중"},
+      {zone:"",area:"서대문구",rate:"+0.46",desc:"중저가 키맞추기 가속"},
+      {zone:"",area:"강북구",rate:"+0.45",desc:"매물 급감 + 호가 상승"},
+      {zone:"",area:"관악구",rate:"+0.45",desc:"1인가구 수요 + 교통호재"},
+      {zone:"",area:"강서구",rate:"+0.43",desc:"재건축 기대 지속"},
+      {zone:"",area:"광진구",rate:"+0.43",desc:"한강벨트 수혜"},
+      {zone:"강남권 상승 확대",area:"송파구",rate:"+0.38",zoneColor:"#3B82F6",desc:"재건축+실수요 급등"},
+      {zone:"",area:"서초구",rate:"+0.26",desc:"상승 가속"},
+      {zone:"",area:"강남구",rate:"+0.20",desc:"2주 연속 상승, 반등 확인"}
+    ],
+    tradeInsight:{title:"핵심 해석 — 올해 최고 +0.31%, 3주 연속 가속",body:"서울 매매가격이 <strong>+0.31%로 올해 최고 상승률</strong>을 기록하며 3주 연속 상승폭이 확대. 성북구(+0.49%)·서대문구(+0.46%)·강북구(+0.45%) 등 <strong>중저가 지역이 역대급 상승</strong>을 이어가는 가운데, 송파구(+0.38%)가 급등하며 강남권도 상승세 확대. 양도세 중과 재시행 이후 매물 잠김이 구조화되면서 <strong>매물 부족→호가 상승→수요 관망</strong>의 순환이 형성되는 국면"},
+    jeonse:{
+      nation:{val:"+0.13%",chg:"전주 대비 ▲ 상승",note:"전월 +0.52% · 전년동월 +3.0%"},
+      seoul:{val:"+0.29%",chg:"올해 최고 · 역대 최고 수준 유지",note:"25개 자치구 전역 상승 지속<br>전세수급지수 105.2 (수요>>>공급)",badge:"역대급 지속"},
+      wolse:{val:"43.5%",chg:"2020년 38.9% → 2025년 42.8% → 43.5%",note:"전세→월세 전환 지속<br>전국 월세 57.0%"},
+      metro:{val:"+0.19%",chg:"수도권 +0.19% · 지방 +0.05%",note:"5대광역시 +0.06% · 8개도 +0.04%"}
+    },
+    jeonseTable:[
+      {region:"전국",rate:"+0.13",monthly:"+0.52",dir:"▲"},
+      {region:"<strong>서울</strong>",rate:"+0.29",monthly:"+1.16",dir:"▲"},
+      {region:"수도권",rate:"+0.19",monthly:"+0.76",dir:"▲"},
+      {region:"지방",rate:"+0.05",monthly:"+0.20",dir:"▲"},
+      {region:"5대 광역시",rate:"+0.06",monthly:"+0.24",dir:"▲"},
+      {region:"8개도 지역",rate:"+0.04",monthly:"+0.16",dir:"▲"}
+    ],
+    jeonseInsight:{title:"전세 역대급 지속 — +0.29%, 수급지수 105.2",body:"서울 전세 <strong>+0.29%로 올해 최고이자 역대급 수준</strong>을 유지. 전세수급지수가 105.2까지 상승하며 수요가 공급을 압도하는 구조가 심화. 2026년 서울 입주물량 48% 급감 영향으로 <strong>전세 매물 부족이 구조적</strong>이며, 양도세 중과로 임대인 매도 기피→전세 매물 추가 감소 악순환. 월세 비중 43.5%로 월세화 가속"},
+    schedule:[
+      {name:"금통위",date:"2026-05-28",dday:"D-10",outlook:"동결 전망"},
+      {name:"보유세 기준일",date:"2026-06-01",dday:"D-14",outlook:"5.29 잔금 마지노선"},
+      {name:"지방선거",date:"2026-06-03",dday:"D-16",outlook:"정부 규제 강화 기조"},
+      {name:"FOMC",date:"2026-06-17",dday:"D-30",outlook:"동결 전망"}
+    ],
+    signals:[
+      {icon:"s1",num:1,title:"서울 +0.31% 올해 최고 — 3주 연속 상승폭 확대",body:"서울 매매가격이 <strong>+0.31%로 올해 최고 상승률</strong>을 기록하며 18주 연속 상승. 5월 들어 +0.28%→+0.31%로 3주 연속 상승폭이 확대되며 <strong>가속 국면</strong>에 진입. 성북(+0.49%)·서대문(+0.46%)·강북(+0.45%)·관악(+0.45%)이 역대급 상승을 이어가고, 송파(+0.38%)가 급등하며 강남권도 상승세 확대. 25개구 전역 상승 4주째 지속"},
+      {icon:"s2",num:2,title:"송파 +0.38% 급등 — 강남3구 상승 본격화",body:"<strong>송파구가 +0.38%로 급등</strong>하며 재건축+실수요 동반 상승. 서초구(+0.26%)·강남구(+0.20%)도 상승폭 확대, <strong>강남3구 합산 상승률이 5월 들어 최대</strong>. 토허제 규제 속에서도 실수요 위주로 거래가 이뤄지며 가격 방어를 넘어 상승세로 전환 중. 노원(+0.32%)·도봉(+0.37%) 등 외곽도 동반 상승"},
+      {icon:"s4",num:3,title:"전세 +0.29% 역대급 — 수급지수 105.2",body:"서울 전세가격이 <strong>+0.29%로 올해 최고</strong>를 기록. 전세수급지수가 105.2까지 상승하며 <strong>수요가 공급을 크게 압도</strong>하는 상황. 2026년 서울 입주물량이 전년 대비 48% 급감한 영향이 본격화되면서, 전세 매물이 나오면 즉시 소진되는 구조. 보유세 기준일(6.1)을 앞두고 매도 희망자들의 잔금 일정 조율도 전세 시장에 변수"},
+      {icon:"s5",num:4,title:"5.28 금통위 D-10 — 매파적 동결 전망, 인상 소수의견 가능",body:"5월 28일 금통위가 <strong>D-10으로 임박</strong>. 시장은 8회 연속 동결을 전망하지만, <strong>인상 소수의견이 나올 가능성</strong>이 제기. 서울 집값 급등(올해 최고)과 공시가격 18.6% 상승이 한은의 경계감을 자극하는 상황. 주담대 4.34%로 2년4개월 최고 수준이며, <strong>보유세 기준일(6.1)·지방선거(6.3)</strong>가 연이어 도래하면서 정책 변수가 집중되는 구간"}
+    ]
+  },
+  "w3": {
+    label:"5월 3주", basis:"5월2주(5.11) 기준",
+    ticker:{krRate:"2.50%",usRate:"3.50~3.75%",gap:"-1.13%p",mortgage:"4.34%",m2:"4,640조",listing:"65,682건",listingChg:"▼ 전주 -5.1%",taxStatus:"시행 중",taxChg:"매물 잠김 가속"},
+    trade:{
+      nation:{val:"+0.08%",chg:"전주 대비 ▲ 상승 (3개월 내 최대)",note:"전월 대비 +0.32% · 전년동월 대비 +2.1%",badge:"상승 가속"},
+      seoul:{val:"+0.28%",chg:"17주 연속 상승 · 3개월 내 최대폭",note:"25개구 전역 상승! 강남구 +0.19% 반등<br>성북 +0.54% 종로 +0.36% 역대 최고",badge:"25개구 전역 상승"},
+      metro:{val:"+0.20%",chg:"서울 전역 확산 + 경기 동반 상승",note:"양도세 중과 후 매물 잠김 가속 중"},
+      local:{val:"-0.01%",chg:"▼ 하락 지속",note:"5대광역시 -0.01% · 8개도 +0.01%"}
+    },
+    tradeTable:[
+      {region:"전국",rate:"+0.08",monthly:"+0.32",dir:"▲",note:"3개월 내 최대 상승폭"},
+      {region:"<strong>서울</strong>",rate:"+0.28",monthly:"+1.12",dir:"▲",note:"25개구 전역 상승, 강남 반등"},
+      {region:"수도권",rate:"+0.20",monthly:"+0.80",dir:"▲",note:"서울 확산 + 경기 동반"},
+      {region:"지방",rate:"-0.01",monthly:"-0.04",dir:"▼",note:"미분양 누적 지속"},
+      {region:"5대 광역시",rate:"-0.01",monthly:"-0.04",dir:"▼",note:""},
+      {region:"8개도 지역",rate:"+0.01",monthly:"+0.04",dir:"▲",note:""}
+    ],
+    seoulDetail:[
+      {zone:"역대 최고 상승",area:"성북구",rate:"+0.54",zoneColor:"#10B981",desc:"역대 최고 주간 상승률 경신"},
+      {zone:"",area:"종로구",rate:"+0.36",desc:"역대 최고 주간 상승률 경신"},
+      {zone:"",area:"강서구",rate:"+0.33",desc:"재건축 기대 + 매물 급감"},
+      {zone:"",area:"서대문구",rate:"+0.30",desc:"중저가 키맞추기 지속"},
+      {zone:"",area:"동대문구",rate:"+0.28",desc:"15억 이하 실수요 집중"},
+      {zone:"강남권 전면 반등",area:"송파구",rate:"+0.22",zoneColor:"#3B82F6",desc:"상승 가속"},
+      {zone:"",area:"서초구",rate:"+0.20",desc:"2주 연속 상승"},
+      {zone:"",area:"용산구",rate:"+0.20",desc:"상승 지속"},
+      {zone:"",area:"강남구",rate:"+0.19",desc:"11주 만에 상승 전환! 포위망 해소"}
+    ],
+    tradeInsight:{title:"핵심 해석 — 25개구 전역 상승, 강남 11주 만에 반등",body:"<strong>서울 25개 전 자치구가 모두 상승</strong>하며, 강남구(+0.19%)가 11주 만에 상승 전환. '강남 포위망'이 해소되며 <strong>서울 전역 동반 상승 국면</strong>에 진입. 성북구(+0.54%)·종로구(+0.36%)가 역대 최고 주간 상승률을 기록하면서, <strong>중저가→고가 확산 흐름이 본격화</strong>. 매물은 65,682건으로 전주 대비 5.1% 추가 감소, 양도세 중과 재시행 이후 매물 잠김이 구조화되는 양상"},
+    jeonse:{
+      nation:{val:"+0.12%",chg:"전주 대비 ▲ 상승",note:"전월 +0.48% · 전년동월 +2.8%"},
+      seoul:{val:"+0.28%",chg:"10년6개월 만에 역대 최고 (545주 만)",note:"25개 전 자치구 상승 · 전세 불장 장기화<br>성북 +0.51% · 송파 +0.50% · 성동 +0.40%",badge:"역대 최고 갱신"},
+      wolse:{val:"43.2%",chg:"2020년 38.9% → 2025년 42.8% → 43.2%",note:"전세→월세 전환 지속 가속<br>전국 월세 56.5%로 이미 역전"},
+      metro:{val:"+0.18%",chg:"수도권 +0.18% · 지방 +0.05%",note:"5대광역시 +0.06% · 8개도 +0.04%"}
+    },
+    jeonseTable:[
+      {region:"전국",rate:"+0.12",monthly:"+0.48",dir:"▲"},
+      {region:"<strong>서울</strong>",rate:"+0.28",monthly:"+1.12",dir:"▲"},
+      {region:"수도권",rate:"+0.18",monthly:"+0.72",dir:"▲"},
+      {region:"지방",rate:"+0.05",monthly:"+0.20",dir:"▲"},
+      {region:"5대 광역시",rate:"+0.06",monthly:"+0.24",dir:"▲"},
+      {region:"8개도 지역",rate:"+0.04",monthly:"+0.16",dir:"▲"}
+    ],
+    jeonseInsight:{title:"전세 '불장' 역대급 — 545주 만에 최고 상승률 갱신",body:"서울 전세 <strong>+0.28%로 2015년 11월 이후 약 10년6개월, 545주 만에 최고 상승률</strong>을 갱신. 성북구(+0.51%)·송파구(+0.50%)·성동구(+0.40%)·노원구(+0.36%) 등 거주 선호지역 중심으로 상승 압력이 전방위로 확산. <strong>전세수급지수 104.9로 수요가 공급을 압도</strong>하는 상황이며, 2026년 서울 입주물량이 전년 대비 48% 급감하면서 전세 불안은 장기화될 전망. 월세 비중 43.2%로 월세화 가속"},
+    schedule:[
+      {name:"금통위",date:"2026-05-28",dday:"D-9",outlook:"동결 전망"},
+      {name:"FOMC",date:"2026-06-17",dday:"D-29",outlook:"동결 전망"},
+      {name:"금통위",date:"2026-07-09",dday:"D-51",outlook:"인하 가능"},
+      {name:"FOMC",date:"2026-07-29",dday:"D-71",outlook:"인하 관망"}
+    ],
+    signals:[
+      {icon:"s1",num:1,title:"매매·전세 동반 +0.28% — 3개월 내 최대 상승폭",body:"서울 아파트 매매가격이 <strong>+0.28%로 1월 마지막주 이후 3개월 내 최대 상승폭</strong>을 기록. 전세도 +0.28%로 동일한 상승폭을 보이며 <strong>매매·전세 동반 급등</strong> 양상. 17주 연속 상승 행진이 이어지면서 서울 집값 상승 추세가 뚜렷하게 확인됨. 전국도 +0.08%로 상승폭 확대"},
+      {icon:"s2",num:2,title:"강남구 11주 만에 반등 — 25개구 전역 상승 시대 개막",body:"<strong>강남구가 +0.19%로 11주 만에 상승 전환</strong>, 서울 25개 전 자치구가 모두 상승하는 '전역 상승' 국면에 진입. 성북구(+0.54%)·종로구(+0.36%)는 <strong>역대 최고 주간 상승률</strong>을 기록. 강서구(+0.33%)·서대문구(+0.30%) 등 중저가 지역의 키맞추기와 강남권 반등이 동시에 나타나며, <strong>중저가→고가 확산 흐름이 본격화</strong>되는 신호"},
+      {icon:"s4",num:3,title:"전세 역대 최고 갱신 — 545주(10년6개월) 만에 최고 상승률",body:"서울 전세 <strong>+0.28%로 2015년 11월 이후 545주 만에 최고 상승률</strong>. 성북구(+0.51%)·송파구(+0.50%)·성동구(+0.40%)·노원구(+0.36%) 등 거주 선호지역 중심으로 전방위 상승. <strong>전세수급지수 104.9</strong>(100 초과=수요>공급)이며, 2026년 서울 입주물량이 전년 대비 48% 급감하면서 <strong>전세 불안은 하반기까지 장기화</strong> 전망"},
+      {icon:"s3",num:4,title:"매물 잠김 구조화 — 65,682건, 전주 대비 5.1% 추가 감소",body:"서울 아파트 매물이 <strong>65,682건으로 전주(69,175건) 대비 5.1%(3,493건) 추가 감소</strong>. 강동구(-9.3%)·성북구(-8.0%)·노원구(-6.6%)·강서구(-6.5%) 순으로 매물이 빠르게 사라지는 중. 양도세 중과 재시행(최고 82.5%) 이후 다주택자 매도 기피→호가 상승→매물 회수의 <strong>악순환이 구조화</strong>되면서, 거래량은 줄지만 가격은 오르는 전형적인 매물잠김 장세"},
+      {icon:"s5",num:5,title:"5.28 금통위 D-9 — 동결 전망 속 주담대 4.34% 2년4개월 최고",body:"5월 28일 금통위가 <strong>D-9으로 목전</strong>에 다가옴. 시장은 기준금리 2.50% 동결을 전망하고 있으나, <strong>주담대 금리가 4.34%로 2년4개월 만에 최고</strong> 수준까지 상승. 은행 주담대 위험가중치 상향과 가계부채 관리 기조로 대출 문턱이 높아지면서, <strong>규제 속 양극화</strong>가 심화되는 구조. 대출 여력이 있는 실수요자만 시장에 진입하면서 중저가 아파트 선호 현상 강화"}
+    ]
+  },
+  "w2": {
+    label:"5월 2주", basis:"5월1주(5.4) 기준",
+    ticker:{krRate:"2.50%",usRate:"3.50~3.75%",gap:"-1.13%p",mortgage:"4.29~4.34%",m2:"4,618조",listing:"69,175건",listingChg:"▼ 한달 -9.2%",taxStatus:"5.10 재시행",taxChg:"시행 중"},
+    trade:{
+      nation:{val:"+0.04%",chg:"전주 대비 ▲ 상승",note:"전월 대비 +0.16% · 전년동월 대비 +1.9%",badge:"상승"},
+      seoul:{val:"+0.15%",chg:"16주 연속 상승 · 3주 연속 0.15%",note:"강남 -0.04% 유일 하락 vs 24개구 상승<br>서초·송파·용산 상승 전환",badge:"강북+강남권 확산"},
+      metro:{val:"+0.08%",chg:"서울 확산 + 경기 풍선효과",note:"양도세 중과 후 수도권 매물 급감 중"},
+      local:{val:"-0.01%",chg:"▼ 하락 지속",note:"5대광역시 -0.02% · 8개도 +0.01%"}
+    },
+    tradeTable:[
+      {region:"전국",rate:"+0.04",monthly:"+0.16",dir:"▲",note:"서울 확산 상승"},
+      {region:"<strong>서울</strong>",rate:"+0.15",monthly:"+0.60",dir:"▲",note:"강남구만 유일 하락, 24개구 상승"},
+      {region:"수도권",rate:"+0.08",monthly:"+0.32",dir:"▲",note:"양도세 중과 후 매물 급감"},
+      {region:"지방",rate:"-0.01",monthly:"-0.04",dir:"▼",note:"미분양 누적 지속"},
+      {region:"5대 광역시",rate:"-0.02",monthly:"-0.08",dir:"▼",note:""},
+      {region:"8개도 지역",rate:"+0.01",monthly:"+0.04",dir:"▲",note:""}
+    ],
+    seoulDetail:[
+      {zone:"강남 유일 하락",area:"강남구",rate:"-0.04",zoneColor:"#F87171",desc:"11주째 약세, 서울 유일 하락구"},
+      {zone:"강남권 반등",area:"서초구",rate:"+0.04",zoneColor:"#34D399",desc:"9주 만에 상승 전환"},
+      {zone:"",area:"송파구",rate:"+0.17",desc:"상승 가속, 강남 포위망"},
+      {zone:"",area:"용산구",rate:"+0.05",desc:"4주 만에 상승 전환"},
+      {zone:"강북·외곽 강세",area:"강서구",rate:"+0.30",zoneColor:"#34D399",desc:"서울 상승률 1위, 가양·내발산"},
+      {zone:"",area:"성북구",rate:"+0.27",desc:"길음·하월곡 대단지"},
+      {zone:"",area:"강북구",rate:"+0.25",desc:"중저가 키맞추기 지속"},
+      {zone:"",area:"동대문구",rate:"+0.24",desc:"15억 이하 실수요 집중"},
+      {zone:"",area:"구로구",rate:"+0.24",desc:"매물 16.6% 급감"}
+    ],
+    tradeInsight:{title:"핵심 해석 — 강남 포위망 형성",body:"<strong>서초·송파·용산이 상승 전환</strong>하면서 강남구만 유일 하락(-0.04%)으로 고립. 강남 포위망이 형성되며 강남 반등도 시간 문제라는 시각 확산. <strong>5.10 양도세 중과 재시행 이후 매물이 한달새 9.2% 급감</strong>하면서, 강북·외곽권은 매물 부족→호가 상승 압력 강화. 강서구(+0.30%) 서울 1위, 구로구 매물 16.6% 증발"},
+    jeonse:{
+      nation:{val:"+0.10%",chg:"전주 대비 ▲ 상승",note:"전월 +0.40% · 전년동월 +2.5%"},
+      seoul:{val:"+0.23%",chg:"10년 만에 최고 상승률(2015.11 이후)",note:"서울 25개 전 자치구 상승 '불장'<br>평균 전세 6.8억 역대 최고 경신 중",badge:"역대 최고"},
+      wolse:{val:"42.8%",chg:"2020년 38.9% → 2025년 42.8%",note:"전세→월세 전환 가속화<br>전국은 월세 56.5%로 이미 역전"},
+      metro:{val:"+0.17%",chg:"수도권 +0.17% · 지방 +0.04%",note:"5대광역시 +0.05% · 8개도 +0.03%"}
+    },
+    jeonseTable:[
+      {region:"전국",rate:"+0.10",monthly:"+0.40",dir:"▲"},
+      {region:"<strong>서울</strong>",rate:"+0.23",monthly:"+0.92",dir:"▲"},
+      {region:"수도권",rate:"+0.17",monthly:"+0.68",dir:"▲"},
+      {region:"지방",rate:"+0.04",monthly:"+0.16",dir:"▲"},
+      {region:"5대 광역시",rate:"+0.05",monthly:"+0.20",dir:"▲"},
+      {region:"8개도 지역",rate:"+0.03",monthly:"+0.12",dir:"▲"}
+    ],
+    jeonseInsight:{title:"전세 시장 '불장' — 10년 만에 최고 상승률",body:"서울 전세 상승률 <strong>+0.23%로 2015년 11월 이후 약 10년 만에 최고치</strong>를 기록. 25개 전 자치구가 모두 상승하며, 매물이 나오면 1~2일 내 계약되는 상황. 양도세 중과 재시행으로 임대 매물 추가 감소가 예상되면서 <strong>전세 불안은 더 심화될 전망</strong>. 전국 기준 월세 비중 56.5%로 이미 전세를 역전, 서울도 42.8%로 월세화 가속 중"},
+    schedule:[
+      {name:"금통위",date:"2026-05-28",dday:"D-18",outlook:"동결 전망"},
+      {name:"FOMC",date:"2026-06-17",dday:"D-38",outlook:"동결 전망"},
+      {name:"금통위",date:"2026-07-09",dday:"D-60",outlook:"인하 가능"},
+      {name:"FOMC",date:"2026-07-29",dday:"D-80",outlook:"인하 관망"}
+    ],
+    signals:[
+      {icon:"s2",num:1,title:"양도세 중과 재시행 완료 — 매물 잠김 현실화",body:"<strong>5월 10일부 양도세 중과 전면 재시행</strong>. 반포자이 3주택자 기준 세금 12.7억→27.3억원, 최고세율 82.5%(지방세 포함). 재시행 전 마지막 주에 토허제 신청 하루 919건 폭주했으나, 급매물은 완전 소진. <strong>서울 매물 한달새 9.2% 급감</strong>(8만→6.9만건), 구로구 -16.6%, 강북구 -15.2%, 성북구 -14.1% 매물 증발. 매물 잠김이 현실화되면서 호가 상승 압력 강화"},
+      {icon:"s1",num:2,title:"강남 포위망 형성 — 서초·송파·용산 상승 전환",body:"<strong>서초구(+0.04%, 9주만에), 송파구(+0.17%), 용산구(4주만에)</strong>가 일제히 상승 전환하면서 강남구(-0.04%)만 서울 유일 하락으로 고립. '강남 포위망'이 형성되며 강남 반등 시점 논의가 시작됨. 강서구(+0.30%) 서울 1위, 성북(+0.27%)·강북(+0.25%)·동대문(+0.24%)·구로(+0.24%) 등 <strong>외곽·강북권이 상승 주도</strong>. 매물이 급감한 구역에서 호가가 상승하는 전형적인 매물잠김 장세"},
+      {icon:"s4",num:3,title:"전세 '불장' — 10년 만에 최고 상승률",body:"서울 전세 <strong>+0.23%로 2015년 11월 이후 약 10년 만에 최고 상승률</strong>. 25개 전 자치구 모두 상승하며 '불장'이라는 표현까지 등장. 양도세 중과 재시행으로 임대인들이 매도를 미루면서 <strong>전세 매물이 추가 감소할 전망</strong>. 서울 평균 전세 6.8억원 역대 최고 경신 중이며, 전세→월세 전환 가속화로 전국 월세 비중 56.5%. 이 구조는 되돌리기 어려움"},
+      {icon:"s5",num:4,title:"M2 4,618조 + 고유가 지원금 2차 신청(5.18~) → 유동성 밸브 열림",body:"M2 광의통화가 <strong>4,618조원(2026.02)</strong>으로 사상 최고 경신 중. 여기에 <strong>5월 18일부터 고유가 피해지원금 2차 신청</strong>이 시작(소득 하위 70%, 3,256만명 대상, 수도권 10만~최대 60만원). 6.1 보유세 기준일과 6.3 지방선거를 앞두고 재정 살포가 가속화되면서 <strong>M2 증가 압력이 가중</strong>. 2016년 대비 M2 111%↑ vs GDP 39%↑ — 괴리 72p. 초과 유동성은 결국 공급 부족한 수도권 부동산에 집중될 구조"}
+    ]
+  },
+  "w1": {
+    label:"5월 1주", basis:"4월4주(4.28) 기준",
+    ticker:{krRate:"2.50%",usRate:"3.50~3.75%",gap:"-1.13%p",mortgage:"4.29~4.34%",m2:"4,618조",listing:"72,674건",listingChg:"—",taxStatus:"5.9 재시행",taxChg:"D-3"},
+    trade:{
+      nation:{val:"+0.03%",chg:"전주 대비 ▲ 상승",note:"전월 대비 +0.12% · 전년동월 대비 +1.8%",badge:"상승"},
+      seoul:{val:"+0.14%",chg:"14주 연속 상승",note:"강남 -0.05% 약세 vs 강북 +0.5% 강세<br>15억 이하 키맞추기 장세",badge:"강북 주도 상승"},
+      metro:{val:"+0.07%",chg:"서울 강북 견인",note:"경기·인천은 보합~소폭 상승"},
+      local:{val:"-0.01%",chg:"▼ 하락 지속",note:"5대광역시 -0.02% · 8개도 +0.01%"}
+    },
+    tradeTable:[
+      {region:"전국",rate:"+0.03",monthly:"+0.12",dir:"▲",note:"강북 주도 상승"},
+      {region:"<strong>서울</strong>",rate:"+0.14",monthly:"+0.56",dir:"▲",note:"강남 약세 vs 강북 강세"},
+      {region:"수도권",rate:"+0.07",monthly:"+0.28",dir:"▲",note:""},
+      {region:"지방",rate:"-0.01",monthly:"-0.04",dir:"▼",note:"미분양 누적 지속"},
+      {region:"5대 광역시",rate:"-0.02",monthly:"-0.08",dir:"▼",note:""},
+      {region:"8개도 지역",rate:"+0.01",monthly:"+0.04",dir:"▲",note:""}
+    ],
+    seoulDetail:[
+      {zone:"강남권 약세",area:"강남구",rate:"-0.05",zoneColor:"#F87171",desc:"6주 연속 약세, 토허제+양도세 중과 영향"},
+      {zone:"",area:"서초구",rate:"-0.02",desc:"거래절벽 지속"},
+      {zone:"",area:"송파구",rate:"0.00",desc:"보합 전환"},
+      {zone:"",area:"강동구",rate:"-0.08",desc:"급매 출현, 약세 심화"},
+      {zone:"강북권 강세",area:"동대문구",rate:"+0.63",zoneColor:"#34D399",desc:"15억 이하 실수요 집중"},
+      {zone:"",area:"서대문구",rate:"+0.62",desc:"중저가 키맞추기"},
+      {zone:"",area:"성북구",rate:"+0.52",desc:"주담대 6억 한도 내 매수세"},
+      {zone:"",area:"마포구",rate:"+0.38",desc:"비토허구역 풍선효과"}
+    ],
+    tradeInsight:{title:"핵심 해석",body:"주담대 6억 한도 규제로 <strong>15억 이하 아파트</strong>에 실수요 매수세가 집중되면서, 강남권 고가 아파트는 거래절벽+하락보합, 강북권 중저가 아파트는 키맞추기 상승. 다주택자 매물을 실수요자가 흡수하는 구조 → <strong>5.9 양도세 중과 재시행 이후 매물 잠김 심화 전망</strong>"},
+    jeonse:{
+      nation:{val:"+0.09%",chg:"전주 대비 ▲ 상승",note:"전월 +0.36% · 전년동월 +2.4%"},
+      seoul:{val:"+0.20%",chg:"서울 평균 전세 6.8억 돌파",note:"매물 나오면 1~2일 내 계약<br>선택의 여지 거의 없는 상황",badge:"역대 최고"},
+      wolse:{val:"42.8%",chg:"2020년 38.9% → 2025년 42.8%",note:"전세→월세 전환 가속화<br>전국은 월세 56.5%로 이미 역전"},
+      metro:{val:"+0.15%",chg:"수도권 +0.15% · 지방 +0.04%",note:"5대광역시 +0.05% · 8개도 +0.03%"}
+    },
+    jeonseTable:[
+      {region:"전국",rate:"+0.09",monthly:"+0.36",dir:"▲"},
+      {region:"<strong>서울</strong>",rate:"+0.20",monthly:"+0.80",dir:"▲"},
+      {region:"수도권",rate:"+0.15",monthly:"+0.60",dir:"▲"},
+      {region:"지방",rate:"+0.04",monthly:"+0.16",dir:"▲"},
+      {region:"5대 광역시",rate:"+0.05",monthly:"+0.20",dir:"▲"},
+      {region:"8개도 지역",rate:"+0.03",monthly:"+0.12",dir:"▲"}
+    ],
+    jeonseInsight:{title:"전세 시장 불안 심화",body:"10·15 대책 이후 전세 매물이 급감하면서 <strong>서울 전세값이 역대 최고(6.8억)</strong>를 기록. 전세 대출 규제와 전세가 상승 부담이 겹치면서 <strong>전세→월세 전환이 가속화</strong>되고 있음. 전국 기준 월세 비중이 이미 56.5%로 전세를 역전한 상황이며, 서울도 42.8%까지 상승. 앞으로 이 추세는 더 강해질 전망"},
+    schedule:[
+      {name:"금통위",date:"2026-05-28",dday:"D-22",outlook:"동결 전망"},
+      {name:"FOMC",date:"2026-06-17",dday:"D-42",outlook:"동결 전망"},
+      {name:"금통위",date:"2026-07-09",dday:"D-64",outlook:"인하 가능"},
+      {name:"FOMC",date:"2026-07-29",dday:"D-84",outlook:"인하 관망"}
+    ],
+    signals:[
+      {icon:"s2",num:1,title:"5.9 양도세 중과 재시행 — 매물 잠김 본격화",body:"4년간 유예되었던 다주택자 양도세 중과가 <strong>5월 9일부로 전면 재시행</strong>. 조정대상지역 2주택자 +20%p, 3주택 +30%p 중과. 이미 급매물은 상당 부분 소진된 상태로, 재시행 이후에는 <strong>다주택자 매도 기피 → 매물 감소 → 호가 상승</strong> 흐름이 예상됨. 거래량은 더 줄겠지만, 가격은 하방보다 상방 압력이 강해지는 구조"},
+      {icon:"s1",num:2,title:"강남 하락보합 vs 강북 키맞추기 — 장세 전환",body:"주담대 6억 한도 규제로 <strong>15억 이하 중저가 아파트에 실수요 매수세가 집중</strong>. 강남구(-0.05%)·서초·강동은 거래절벽+약세 지속, 반면 동대문(+0.63%)·서대문(+0.62%)·성북(+0.52%) 등 <strong>강북권이 상승 주도</strong>. 다주택자 매물을 실수요자가 흡수하면서, 토허제·양도세 영향으로 고가 아파트는 잠기고 중저가는 키맞추기 되는 양극화 장세"},
+      {icon:"s4",num:3,title:"전세 불안 심화 + 월세화 가속",body:"서울 평균 전세가 <strong>6.8억원으로 역대 최고</strong>를 기록. 10·15 대책(서울 전역 토허제) 이후 전세 매물이 급감하면서, 매물이 나오면 1~2일 내에 계약되는 상황. 전세 대출 규제와 가격 부담이 겹치면서 <strong>전세→월세 전환이 가속화</strong>. 전국 기준 이미 월세 비중 56.5%로 전세를 역전했고, 서울도 42.8%까지 상승 중. 이 구조는 되돌리기 어려움"},
+      {icon:"s5",num:4,title:"M2 4,618조 역대최고 + 고유가 지원금 → 유동성 확대 지속",body:"M2 광의통화가 <strong>4,618조원(2026.02)</strong>으로 사상 최고 경신 중. 2016년 대비 111% 증가한 반면 명목GDP는 39% 증가에 그쳐 <strong>M2-GDP 괴리가 72p</strong>로 벌어짐. 여기에 6월 지방선거를 앞두고 <strong>고유가 피해지원금(국민 70%에 최대 60만원)</strong> 등 재정 지출이 확대되면서 유동성 증가 압력이 가중. 초과 유동성은 결국 자산시장으로 흘러들어가는 구조 — 특히 공급이 부족한 수도권 부동산에 집중될 전망"}
+    ]
+  }
+};
+
+
+// --- Render functions ---
+function togglePanel(id){
+  const p=document.getElementById('panel-'+id);
+  const b=p.previousElementSibling;
+  p.classList.toggle('open');
+  b.classList.toggle('open');
+}
+
+function valClass(v){return parseFloat(v)>0?'up':parseFloat(v)<0?'down':''}
+
+function renderWeek(wk){
+  const d=WEEKS[wk]; if(!d) return;
+  document.getElementById('dateBadge').textContent=d.basis;
+  const t=d.ticker;
+  document.getElementById('tick-krRate').textContent=t.krRate;
+  document.getElementById('tick-usRate').textContent=t.usRate;
+  document.getElementById('tick-gap').textContent=t.gap;
+  document.getElementById('tick-mortgage').textContent=t.mortgage;
+  document.getElementById('tick-m2').textContent=t.m2;
+  document.getElementById('tick-listing').textContent=t.listing;
+  document.getElementById('tick-listingChg').textContent=t.listingChg;
+  document.getElementById('tick-taxStatus').textContent=t.taxStatus;
+  document.getElementById('tick-taxChg').textContent=t.taxChg;
+  ['nation','seoul','metro','local'].forEach(k=>{
+    const c=d.trade[k];
+    const ve=document.getElementById('s1-'+k+'-val');
+    ve.textContent=c.val; ve.className='card-value '+valClass(c.val);
+    document.getElementById('s1-'+k+'-chg').textContent=c.chg;
+    document.getElementById('s1-'+k+'-note').innerHTML=c.note;
+    const badge=document.getElementById('s1-'+k+'-badge');
+    if(badge) badge.textContent=c.badge||'';
+  });
+  const ttb=document.querySelector('#tradeTableEl tbody');
+  ttb.innerHTML=d.tradeTable.map(r=>`<tr><td>${r.region}</td><td class="${r.dir==='▲'?'dir-up':'dir-down'}">${r.rate}</td><td>${r.monthly}</td><td class="${r.dir==='▲'?'dir-up':'dir-down'}">${r.dir}</td><td style="font-size:11px;color:#94A3B8">${r.note||''}</td></tr>`).join('');
+  const sd=document.getElementById('seoulDetailEl');
+  let sh='';
+  d.seoulDetail.forEach(s=>{
+    if(s.zone) sh+=`<div style="grid-column:1/-1"><span class="zone-label" style="background:${s.zoneColor?s.zoneColor+'22':'rgba(148,163,184,0.1)'};color:${s.zoneColor||'#94A3B8'}">${s.zone}</span></div>`;
+    const rc=parseFloat(s.rate)>0?'#10B981':parseFloat(s.rate)<0?'#EF4444':'#94A3B8';
+    sh+=`<div class="seoul-item"><div><div class="seoul-area">${s.area}</div><div class="seoul-desc">${s.desc}</div></div><div class="seoul-rate" style="color:${rc}">${s.rate}%</div></div>`;
+  });
+  sd.innerHTML=sh;
+  const ti=d.tradeInsight;
+  document.getElementById('tradeInsightEl').innerHTML=`<div class="insight-title">${ti.title}</div><div class="insight-body">${ti.body}</div>`;
+  ['nation','seoul','wolse','metro'].forEach(k=>{
+    const c=k==='wolse'?d.jeonse.wolse:d.jeonse[k];
+    const pfx='s2-'+(k==='wolse'?'wolse':k);
+    const ve=document.getElementById(pfx+'-val');
+    ve.textContent=c.val;
+    if(k!=='wolse') ve.className='card-value '+valClass(c.val);
+    document.getElementById(pfx+'-chg').textContent=c.chg;
+    document.getElementById(pfx+'-note').innerHTML=c.note;
+    const badge=document.getElementById(pfx+'-badge');
+    if(badge) badge.textContent=c.badge||'';
+  });
+  const jtb=document.querySelector('#jeonseTableEl tbody');
+  jtb.innerHTML=d.jeonseTable.map(r=>`<tr><td>${r.region}</td><td class="dir-up">${r.rate}</td><td>${r.monthly}</td><td class="dir-up">${r.dir}</td></tr>`).join('');
+  const ji=d.jeonseInsight;
+  document.getElementById('jeonseInsightEl').innerHTML=`<div class="insight-title">${ji.title}</div><div class="insight-body">${ji.body}</div>`;
+  const stb=document.querySelector('#schedTableEl tbody');
+  stb.innerHTML=d.schedule.map(s=>`<tr><td>${s.name}</td><td>${s.date}</td><td class="dday">${s.dday}</td><td>${s.outlook}</td></tr>`).join('');
+  renderTimeline(wk);
+  const regTax=document.getElementById('regTaxStatus');
+  if(regTax) regTax.textContent=(wk==='w7'||wk==='w6'||wk==='w5'||wk==='w4'||wk==='w3'||wk==='w2')?'시행 중':'D-3';
+  if(regTax) regTax.className='reg-status '+((wk==='w7'||wk==='w6'||wk==='w5'||wk==='w4'||wk==='w3'||wk==='w2')?'reg-active':'reg-pending');
+  const se=document.getElementById('signalsEl');
+  se.innerHTML=d.signals.map(s=>`<div class="signal-card"><div class="signal-icon">${SIGNAL_ICONS[s.icon]||'📊'}</div><div class="signal-num">SIGNAL ${s.num}</div><div class="signal-title">${s.title}</div><div class="signal-body">${s.body}</div></div>`).join('');
+  // NEW: update map for this week
+  if(typeof renderMap==='function'){ try{ renderMap(wk); }catch(e){ console.warn('map render skipped:',e); } }
+}
+
+function renderTimeline(wk){
+  const el=document.getElementById('timelineEl');
+  el.innerHTML=TIMELINE_NODES.map((n,i)=>{
+    let st=n.status||n['statusW3'];
+    if(wk==='w1' && n['statusW1']) st=n['statusW1'];
+    else if(wk==='w2' && n['statusW2']) st=n['statusW2'];
+    else if(wk==='w3' && n['statusW3']) st=n['statusW3'];
+    else if(wk==='w4' && n['statusW4']) st=n['statusW4'];
+    else if(wk==='w5' && n['statusW5']) st=n['statusW5'];
+    else if(wk==='w6' && n['statusW6']) st=n['statusW6'];
+    else if(wk==='w7' && n['statusW7']) st=n['statusW7'];
+    const lineCls=st==='past'?'past':'';
+    return `<div class="tl-node"><div class="tl-dot ${st}"></div><div class="tl-label">${n.label.replace('\n','<br>')}</div><div class="tl-date">${n.date}</div>${i<TIMELINE_NODES.length-1?`<div class="tl-line ${lineCls}"></div>`:''}</div>`;
+  }).join('');
+}
+
+/* ===== MAP MODULE (Leaflet) ===== */
+let _map=null,_geoLayer=null,_mapMetric='trade',_mapLegend=null,_mapInfo=null;
+
+// Build {구이름: {trade:rate, jeonse:rate, desc}} for a given week from WEEKS
+function buildGuData(wk){
+  const d=WEEKS[wk]; const out={};
+  if(d && d.seoulDetail){
+    d.seoulDetail.forEach(s=>{
+      if(!s.area) return;
+      out[s.area]=out[s.area]||{};
+      out[s.area].trade=parseFloat(s.rate);
+      out[s.area].desc=s.desc||'';
+    });
+  }
+  return out;
+}
+
+function mapColor(v){
+  if(v===undefined||v===null||isNaN(v)) return '#E2E6EB';      // no data
+  if(v>=0.40) return '#B91C1C';
+  if(v>=0.30) return '#EF4444';
+  if(v>=0.20) return '#F87171';
+  if(v>=0.10) return '#FCA5A5';
+  if(v>0)     return '#FECACA';
+  if(v===0)   return '#B6BEC8';
+  if(v>-0.10) return '#BFDBFE';
+  return '#3B82F6';                                            // falling
+}
+
+function initMap(){
+  if(_map) return;
+  _map=L.map('rmap',{zoomControl:true,scrollWheelZoom:false,attributionControl:true}).setView([37.55,127.0],10);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:18,subdomains:'abcd'
+  }).addTo(_map);
+
+  // info box (hover)
+  _mapInfo=L.control();
+  _mapInfo.onAdd=function(){this._div=L.DomUtil.create('div','map-info');this.update();return this._div;};
+  _mapInfo.update=function(p){
+    this._div.innerHTML = p
+      ? `<b>${p.name}</b><br>${p._rate!==undefined&&!isNaN(p._rate)?(p._rate>0?'+':'')+p._rate+'% 매매':'데이터 없음'}`
+      : '지역에 마우스를 올리세요';
+  };
+  _mapInfo.addTo(_map);
+
+  // legend
+  _mapLegend=L.control({position:'bottomright'});
+  _mapLegend.onAdd=function(){
+    const div=L.DomUtil.create('div','map-legend');
+    const grades=[['#B91C1C','+0.40↑'],['#EF4444','+0.30'],['#F87171','+0.20'],['#FCA5A5','+0.10'],['#FECACA','+0~'],['#B6BEC8','보합'],['#3B82F6','하락'],['#E2E6EB','데이터없음']];
+    div.innerHTML='<div class="ml-t">주간 매매변동률</div>'+grades.map(g=>`<div class="ml-row"><span class="ml-sw" style="background:${g[0]}"></span>${g[1]}</div>`).join('');
+    return div;
+  };
+  _mapLegend.addTo(_map);
+}
+
+function renderMap(wk){
+  if(!_map) initMap();
+  const gu=buildGuData(wk);
+  if(_geoLayer){_map.removeLayer(_geoLayer);_geoLayer=null;}
+
+  function styleFn(feat){
+    const nm=feat.properties.name;
+    if(feat.properties.level==='province'){
+      return {fillColor:'#D9DEE5',weight:1.2,color:'#A7B0BB',fillOpacity:0.45,dashArray:'4'};
+    }
+    const v=gu[nm]?gu[nm].trade:undefined;
+    return {fillColor:mapColor(v),weight:1,color:'#FFFFFF',fillOpacity:0.82};
+  }
+
+  function onEach(feat,layer){
+    const nm=feat.properties.name;
+    const rec=gu[nm];
+    feat.properties._rate = rec?rec.trade:undefined;
+    if(feat.properties.level==='province'){
+      layer.bindTooltip(nm+' (시군구 상세 준비중)',{sticky:true});
+      return;
+    }
+    layer.on({
+      mouseover:e=>{const l=e.target;l.setStyle({weight:2.5,color:'#1A1A1A',fillOpacity:0.95});l.bringToFront();_mapInfo.update(feat.properties);},
+      mouseout:e=>{_geoLayer.resetStyle(e.target);_mapInfo.update();},
+      click:e=>{
+        _map.fitBounds(e.target.getBounds(),{maxZoom:12,padding:[40,40]});
+        const t=WEEKS[wk];
+        const tradeRate = rec?((rec.trade>0?'+':'')+rec.trade+'%'):'데이터 없음';
+        const html=`<div class="rm-pop">
+          <div class="rm-pop-h">${nm}</div>
+          <div class="rm-pop-row"><span>매매 변동률</span><b style="color:${mapColor(rec?rec.trade:undefined)==='#3B82F6'?'#60A5FA':'#F87171'}">${tradeRate}</b></div>
+          ${rec&&rec.desc?`<div class="rm-pop-desc">${rec.desc}</div>`:''}
+          <div class="rm-pop-row"><span>서울 전세(평균)</span><b>${t.jeonse.seoul.val}</b></div>
+          <div class="rm-pop-foot">${t.basis}</div>
+        </div>`;
+        layer.bindPopup(html,{className:'rm-popup'}).openPopup();
+      }
+    });
+  }
+
+  _geoLayer=L.geoJSON(METRO_GEO,{style:styleFn,onEachFeature:onEach}).addTo(_map);
+}
+
+
+// --- CHARTS (static) ---
+function initCharts(){
+  Chart.defaults.color='#94A3B8';
+  Chart.defaults.borderColor='rgba(45,59,83,0.5)';
+  Chart.defaults.font.family="'Noto Sans KR',sans-serif";
+  Chart.defaults.font.size=11;
+  new Chart(document.getElementById('chartSupply'),{
+    type:'bar',
+    data:{labels:['2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026','2027E','2028E'],
+      datasets:[
+        {label:'서울 인허가(호)',data:[72000,58000,48000,35000,28000,42000,38000,32000,23813,17096,9640,18500,14200],backgroundColor:'rgba(59,130,246,0.6)',borderRadius:4,order:2},
+        {label:'연평균 수요',data:[46000,46000,46000,46000,46000,46000,46000,46000,46000,46000,46000,46000,46000],type:'line',borderColor:'#EF4444',borderDash:[5,5],pointRadius:0,borderWidth:2,order:1}
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,padding:12}}},scales:{y:{beginAtZero:true,grid:{color:'rgba(45,59,83,0.3)'},ticks:{callback:v=>(v/1000)+'k'}},x:{grid:{display:false}}}}
+  });
+  new Chart(document.getElementById('chartRate'),{
+    type:'line',
+    data:{labels:['2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026'],
+      datasets:[
+        {label:'한국',data:[1.25,1.25,1.50,1.75,0.50,0.75,3.50,3.50,3.50,2.75,2.50],borderColor:'#3B82F6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.3,pointRadius:3},
+        {label:'미국',data:[0.50,1.25,2.50,2.25,0.25,0.25,4.50,5.50,5.50,4.50,3.63],borderColor:'#EF4444',backgroundColor:'rgba(239,68,68,0.1)',fill:true,tension:0.3,pointRadius:3}
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,padding:12}}},scales:{y:{grid:{color:'rgba(45,59,83,0.3)'},ticks:{callback:v=>v+'%'}},x:{grid:{display:false}}}}
+  });
+  new Chart(document.getElementById('chartM2'),{
+    type:'line',
+    data:{labels:['2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026'],
+      datasets:[
+        {label:'M2 지수',data:[100,107,114,123,137,155,168,178,190,200,211],borderColor:'#8B5CF6',backgroundColor:'rgba(139,92,246,0.1)',fill:true,tension:0.3,pointRadius:3},
+        {label:'명목GDP 지수',data:[100,105,109,113,115,122,128,133,135,137,139],borderColor:'#F59E0B',backgroundColor:'rgba(245,158,11,0.1)',fill:true,tension:0.3,pointRadius:3}
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,padding:12}}},scales:{y:{grid:{color:'rgba(45,59,83,0.3)'}},x:{grid:{display:false}}}}
+  });
+  new Chart(document.getElementById('chartWolse'),{
+    type:'bar',
+    data:{labels:['2020','2021','2022','2023','2024','2025'],
+      datasets:[
+        {label:'전세 비중(%)',data:[61.1,58.5,55.8,52.4,47.2,43.5],backgroundColor:'rgba(59,130,246,0.6)',borderRadius:4},
+        {label:'월세 비중(%)',data:[38.9,41.5,44.2,47.6,52.8,56.5],backgroundColor:'rgba(239,68,68,0.6)',borderRadius:4}
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,padding:12}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,max:100,grid:{color:'rgba(45,59,83,0.3)'},ticks:{callback:v=>v+'%'}}}}
+  });
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  renderWeek('w7');
+  initCharts();
+  // ensure map sizes correctly after layout
+  setTimeout(()=>{ if(_map) _map.invalidateSize(); },300);
+});
+
+</script>
+</body>
+</html>
