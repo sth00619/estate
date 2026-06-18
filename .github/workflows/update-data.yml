@@ -1,0 +1,70 @@
+name: Update real-estate data
+
+on:
+  schedule:
+    # R-ONE weekly trend publishes Thursday; run Thu 01:00 UTC (~10:00 KST)
+    - cron: "0 1 * * 4"
+    # MOLIT monthly refresh: run on the 2nd of each month 02:00 UTC
+    - cron: "0 2 2 * *"
+  workflow_dispatch:
+    inputs:
+      run_rone:
+        description: "Fetch R-ONE weekly (Phase 1)"
+        type: boolean
+        default: true
+      run_molit:
+        description: "Fetch MOLIT transactions (Phase 2)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Decide what to run
+        id: decide
+        run: |
+          # scheduled Thursday -> R-ONE; scheduled 2nd -> MOLIT; manual -> inputs
+          RONE=false; MOLIT=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "0 1 * * 4" ]; then RONE=true; fi
+            if [ "${{ github.event.schedule }}" = "0 2 2 * *" ]; then MOLIT=true; fi
+          else
+            RONE=${{ github.event.inputs.run_rone }}
+            MOLIT=${{ github.event.inputs.run_molit }}
+          fi
+          echo "rone=$RONE"  >> "$GITHUB_OUTPUT"
+          echo "molit=$MOLIT" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch R-ONE weekly (Phase 1)
+        if: steps.decide.outputs.rone == 'true'
+        env:
+          RONE_API_KEY: ${{ secrets.RONE_API_KEY }}
+        run: python3 scripts/fetch_rone.py
+
+      - name: Fetch MOLIT transactions (Phase 2)
+        if: steps.decide.outputs.molit == 'true'
+        env:
+          MOLIT_API_KEY: ${{ secrets.MOLIT_API_KEY }}
+        run: python3 scripts/fetch_molit.py
+
+      - name: Commit updated data
+        run: |
+          git config user.name  "estate-bot"
+          git config user.email "actions@github.com"
+          git add data/*.json
+          if git diff --staged --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "data: auto-update $(date -u +%Y-%m-%d)"
+            git push
+          fi
