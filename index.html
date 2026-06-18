@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>닥터마빈의 부동산 리포트 — 수도권 시세 지도</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<!-- Leaflet core -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- Leaflet plugins: fullscreen, minimap, marker cluster (readability/navigation) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet-fullscreen@1.0.2/dist/leaflet.fullscreen.css" />
+<script src="https://unpkg.com/leaflet-fullscreen@1.0.2/dist/Leaflet.fullscreen.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-minimap@3.6.1/dist/Control.MiniMap.min.css" />
+<script src="https://unpkg.com/leaflet-minimap@3.6.1/dist/Control.MiniMap.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<!-- Charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@sgratzl/chartjs-chart-boxplot@4.4.4/build/index.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F5F6F8; --surface:#FFFFFF; --surface-2:#FAFBFC;
+  --line:#E8EAED; --line-2:#F0F1F3;
+  --text:#1A1A1A; --text-2:#555B62; --text-3:#8B95A1;
+  --naver:#03C75A; --naver-dark:#02B350;
+  --blue:#2E7CF6; --red:#E5474D; --amber:#F5A623; --purple:#7C5CFC;
+  --up:#E5474D; --down:#2E7CF6;
+  --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg:0 4px 16px rgba(0,0,0,0.08);
+  --shadow-xl:0 8px 28px rgba(0,0,0,0.12);
+}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+a{color:var(--naver);text-decoration:none}
+.header{position:sticky;top:0;z-index:1000;background:rgba(255,255,255,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;color:var(--text)}
+.brand-dot{width:10px;height:10px;border-radius:50%;background:var(--naver);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(3,199,90,0.4)}50%{box-shadow:0 0 0 7px rgba(3,199,90,0)}}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.date-badge{font-size:12px;color:var(--text-2);background:var(--surface-2);border:1px solid var(--line);padding:5px 12px;border-radius:8px}
+.seed-badge{font-size:11px;color:#C77F00;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);padding:5px 10px;border-radius:8px;display:none}
+.container{max-width:1280px;margin:0 auto;padding:20px 16px 48px}
+.section{margin-bottom:30px}
+.section-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.section-sub{font-size:12px;color:var(--text-3);margin-bottom:14px}
+.section-num{font-size:11px;background:var(--naver);color:#fff;padding:3px 9px;border-radius:7px;font-weight:800}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:none;background:transparent;font-family:inherit;font-size:12px;font-weight:600;color:var(--text-2);padding:6px 14px;border-radius:8px;cursor:pointer;transition:all .15s}
+.seg button.on{background:var(--naver);color:#fff}
+.seg button:not(.on):hover{color:var(--text)}
+/* MAP */
+.map-wrap{display:grid;grid-template-columns:1fr 340px;gap:14px}
+.map-shell{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:12px;box-shadow:var(--shadow);position:relative}
+#rmap{width:100%;height:560px;border-radius:14px;background:#EAEEF2;z-index:1}
+.map-toolbar{position:absolute;top:22px;left:22px;z-index:500;display:flex;gap:6px;flex-wrap:wrap}
+.map-toolbar .chip{background:rgba(255,255,255,0.96);border:1px solid var(--line);border-radius:9px;font-size:12px;font-weight:600;color:var(--text-2);padding:6px 11px;cursor:pointer;box-shadow:var(--shadow);transition:all .15s}
+.map-toolbar .chip:hover{color:var(--text)}
+.map-toolbar .chip.on{background:var(--naver);color:#fff;border-color:var(--naver)}
+.breadcrumb{position:absolute;bottom:22px;left:22px;z-index:500;background:rgba(255,255,255,0.96);border:1px solid var(--line);border-radius:9px;font-size:12px;font-weight:600;color:var(--text);padding:7px 12px;box-shadow:var(--shadow);display:flex;align-items:center;gap:6px}
+.breadcrumb .bc-link{color:var(--naver);cursor:pointer}
+.breadcrumb .bc-sep{color:var(--text-3)}
+/* side panel */
+.side{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+.panel-h{font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px}
+.panel-sub{font-size:11px;color:var(--text-3);margin-bottom:12px}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line-2)}
+.stat-row:last-child{border-bottom:none}
+.stat-k{font-size:12px;color:var(--text-2)}
+.stat-v{font-size:15px;font-weight:800;color:var(--text)}
+.stat-v.up{color:var(--up)}.stat-v.down{color:var(--down)}
+.empty-hint{font-size:12px;color:var(--text-3);text-align:center;padding:20px 0;line-height:1.7}
+.legend{display:flex;flex-direction:column;gap:5px}
+.legend .lg-t{font-size:11px;font-weight:800;color:var(--text-2);margin-bottom:4px}
+.legend .lg-row{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-2)}
+.legend .lg-sw{width:16px;height:11px;border-radius:3px;border:1px solid rgba(0,0,0,0.05)}
+.mini-chart-wrap{height:150px;position:relative}
+/* charts grid */
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.chart-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+.chart-card.full{grid-column:1/-1}
+.chart-card h3{font-size:13px;font-weight:800;color:var(--text);margin-bottom:2px}
+.chart-card .ch-sub{font-size:11px;color:var(--text-3);margin-bottom:12px}
+.chart-box{position:relative;height:260px}
+.chart-box.tall{height:320px}
+/* market thermometer (breadth doughnuts) */
+.thermo-wrap{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+.thermo-block{display:flex;flex-direction:column;align-items:center;gap:6px}
+.thermo-label{font-size:11px;font-weight:800;color:var(--text-2);letter-spacing:.5px}
+.thermo-box{width:100%;height:170px;position:relative}
+.thermo-summary{font-size:11px;color:var(--text-3);text-align:center;line-height:1.5}
+.thermo-summary b{color:var(--text);font-size:12px}
+/* leaflet overrides */
+.leaflet-container{background:#EAEEF2;font-family:'Noto Sans KR',sans-serif}
+.rm-tooltip{background:rgba(255,255,255,0.97)!important;border:1px solid var(--line)!important;border-radius:9px!important;box-shadow:var(--shadow-lg)!important;color:var(--text)!important;font-size:12px!important;font-weight:600;padding:6px 10px!important}
+.rm-tooltip::before{display:none!important}
+.leaflet-popup-content-wrapper{border-radius:14px;box-shadow:var(--shadow-xl);border:1px solid var(--line)}
+.leaflet-popup-content{margin:14px 16px;font-family:'Noto Sans KR',sans-serif}
+.pop-h{font-size:15px;font-weight:800;color:var(--text);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.pop-row{display:flex;justify-content:space-between;gap:18px;font-size:12px;color:var(--text-2);padding:3px 0}
+.pop-row b{font-size:13px;color:var(--text)}
+.pop-cta{margin-top:8px;font-size:11px;color:var(--naver);font-weight:700;cursor:pointer}
+.leaflet-control-zoom a{background:#fff!important;color:var(--text)!important;border-color:var(--line)!important}
+.leaflet-bar a{border-radius:6px!important}
+.leaflet-control-attribution{background:rgba(255,255,255,0.8)!important;color:var(--text-3)!important;font-size:10px!important}
+.leaflet-control-attribution a{color:var(--text-2)!important}
+.cluster-pin{background:var(--naver);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;box-shadow:0 2px 8px rgba(3,199,90,0.4);border:2px solid #fff}
+.footer{text-align:center;padding:30px 16px;border-top:1px solid var(--line);margin-top:40px}
+.footer-brand{font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px}
+.footer-sub{font-size:11px;color:var(--text-3);line-height:1.7}
+.loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(245,246,248,0.7);border-radius:14px;z-index:600;font-size:13px;color:var(--text-2);font-weight:600}
+@media(max-width:980px){
+  .map-wrap{grid-template-columns:1fr}
+  .side{flex-direction:row;flex-wrap:wrap}
+  .side .panel{flex:1;min-width:240px}
+  .charts{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  .header{padding:12px 16px}
+  #rmap{height:420px}
+  .side{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand"><span class="brand-dot"></span>닥터마빈의 부동산 리포트</div>
+  <div class="header-right">
+    <span class="seed-badge" id="seedBadge">샘플 데이터 — 실데이터 수집 대기</span>
+    <span class="date-badge" id="dateBadge">데이터 로딩 중…</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- SECTION 1: weekly trend map (R-ONE) + SECTION 2 toggle to transactions (MOLIT) -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-num">01</span>수도권 시세 지도
+      <span class="seg" id="metricSeg" style="margin-left:auto">
+        <button data-metric="trade" class="on">매매 변동률</button>
+        <button data-metric="jeonse">전세 변동률</button>
+        <button data-metric="price">실거래 중앙값</button>
+      </span>
+    </div>
+    <div class="section-sub" id="mapSub">시군구를 클릭하면 동(읍면동) 단위로 확대됩니다 · 다시 빈 곳을 클릭하면 시군구로 복귀</div>
+
+    <div class="map-wrap">
+      <div class="map-shell">
+        <div id="rmap"></div>
+        <div class="map-toolbar">
+          <div class="chip on" id="chipLevel">시군구 보기</div>
+          <div class="chip" id="chipMarkers">단지 거래 표시</div>
+        </div>
+        <div class="breadcrumb" id="breadcrumb"><span class="bc-link" id="bcRoot">수도권</span></div>
+        <div class="loading" id="mapLoading">지도 데이터 불러오는 중…</div>
+      </div>
+
+      <div class="side">
+        <div class="panel" id="infoPanel">
+          <div class="panel-h" id="infoTitle">지역을 선택하세요</div>
+          <div class="panel-sub" id="infoSub">지도를 클릭하면 상세 정보가 표시됩니다</div>
+          <div id="infoStats"><div class="empty-hint">시군구를 클릭하면<br>매매·전세 변동률과<br>실거래 통계가 나타납니다.</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h" id="legendTitle">범례</div>
+          <div class="legend" id="legend"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h">최근 추이</div>
+          <div class="panel-sub" id="trendSub">지역 선택 시 12주 변동률</div>
+          <div class="mini-chart-wrap"><canvas id="miniTrend"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: market insights -->
+  <div class="section">
+    <div class="section-title"><span class="section-num">02</span>시장 인사이트</div>
+    <div class="section-sub">수도권 시군구 데이터로 본 한국 부동산 시장의 폭·모멘텀·양극화</div>
+    <div class="charts">
+
+      <!-- (1) 시장 온도계 — 시장 폭 -->
+      <div class="chart-card">
+        <h3>시장 온도계</h3>
+        <div class="ch-sub">상승·보합·하락 시군구 비율 (시장 폭/breadth) — 60% 이상 상승하면 강세장, 50% 미만이면 둔화</div>
+        <div class="thermo-wrap">
+          <div class="thermo-block">
+            <div class="thermo-label">매매</div>
+            <div class="thermo-box"><canvas id="chartBreadthTrade"></canvas></div>
+            <div class="thermo-summary" id="breadthTradeSum">—</div>
+          </div>
+          <div class="thermo-block">
+            <div class="thermo-label">전세</div>
+            <div class="thermo-box"><canvas id="chartBreadthJeonse"></canvas></div>
+            <div class="thermo-summary" id="breadthJeonseSum">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- (2) 모멘텀 -->
+      <div class="chart-card">
+        <h3>상승 모멘텀 TOP 10</h3>
+        <div class="ch-sub">연속 상승 주차 수 — 추세 강도 지표. 매물 잠김+호가 상승이 굳어졌는지 본다</div>
+        <div class="chart-box"><canvas id="chartMomentum"></canvas></div>
+      </div>
+
+      <!-- (3) 시간×지역 히트맵 — full width -->
+      <div class="chart-card full">
+        <h3>시간 × 지역 히트맵 (서울 25구 × 최근 12주)</h3>
+        <div class="ch-sub">색이 진할수록 큰 변동. 어디서 언제 상승이 시작됐는지, 강남→강북 확산 같은 전염 패턴을 한 화면에 본다</div>
+        <div class="chart-box tall"><canvas id="chartHeatmap"></canvas></div>
+      </div>
+
+      <!-- (4) 다이버징 변동률 -->
+      <div class="chart-card full">
+        <h3>이번 주 변동률 다이버징</h3>
+        <div class="ch-sub">좌(하락 5개) ⟷ 우(상승 5개) — 양극화 폭이 클수록 시장 격차 심화</div>
+        <div class="chart-box"><canvas id="chartDiverge"></canvas></div>
+      </div>
+
+      <!-- (5) 평당가 박스플롯 -->
+      <div class="chart-card full">
+        <h3>자치구별 평당가 분포</h3>
+        <div class="ch-sub">박스 = 25–75% 구간, 가운데 선 = 중앙값. 박스가 길수록 자치구 내 가격 다양성이 크다 (재건축 단지 vs 노후 단지 등)</div>
+        <div class="chart-box tall"><canvas id="chartBoxplot"></canvas></div>
+      </div>
+
+      <!-- (6) 가격대별 거래 분포 -->
+      <div class="chart-card full">
+        <h3>가격대별 거래 분포</h3>
+        <div class="ch-sub" id="histSub">선택 지역의 아파트 매매 거래 건수 (1억 단위, 최근 3개월). 분포가 한쪽으로 쏠리면 수요가 특정 가격대에 집중된 상태</div>
+        <div class="chart-box tall"><canvas id="chartHist"></canvas></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <div class="footer-brand">닥터마빈의 부동산 리포트</div>
+  <div class="footer-sub">
+    데이터: 한국부동산원 R-ONE(주간아파트가격동향) · 국토교통부 실거래가(아파트 매매)<br>
+    경계: vuski/admdongkor 행정동 경계 · 지도 타일: CARTO / OpenStreetMap<br>
+    &copy; 2026 닥터마빈. 통계는 참고용이며 실제와 차이가 있을 수 있습니다.
+  </div>
+</div>
+
+<script>
+// ============================================================
+// VWorld 한국어 지도 키 (선택사항)
+// 발급: https://www.vworld.kr → 회원가입 → 오픈API → 인증키 발급
+// 발급받은 키를 아래 큰따옴표 안에 붙여넣으세요.
+// 비워두면 OpenStreetMap Korea 타일로 자동 fallback 됩니다.
+window.VWORLD_KEY = "PUT_VWORLD_KEY_HERE";
+</script>
+<script>
+/* ===================== 닥터마빈 수도권 시세 지도 ===================== */
+const STATE = {
+  metric: "trade",        // trade | jeonse | price
+  level: "sgg",           // sgg | emd
+  activeSgg: null,        // selected 시군구 code when drilled in
+  showMarkers: false,
+  data: { weekly: null, trades: null, geoSgg: null, geoEmd: null },
+  layers: { sgg: null, emd: null, markers: null },
+};
+let MAP, MINIMAP, miniChart;
+
+const fmtMan = v => v == null ? "—" : (v >= 10000 ? (v/10000).toFixed(2).replace(/\.?0+$/,"")+"억" : Math.round(v).toLocaleString()+"만");
+const fmtPct = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(2) + "%";
+
+/* ---------- color scales ---------- */
+function colorPct(v){
+  if(v==null||isNaN(v)) return "#E2E6EB";
+  if(v>=0.40) return "#B91C1C"; if(v>=0.30) return "#EF4444";
+  if(v>=0.20) return "#F87171"; if(v>=0.10) return "#FCA5A5";
+  if(v>0)     return "#FECACA"; if(v===0)    return "#B6BEC8";
+  if(v>-0.10) return "#BFDBFE"; return "#3B82F6";
+}
+function colorPrice(v){ // 만원 median; sequential green
+  if(v==null||isNaN(v)) return "#E2E6EB";
+  if(v>=150000) return "#014D2E"; if(v>=110000) return "#02723F";
+  if(v>=85000)  return "#03A050"; if(v>=65000)  return "#36C47A";
+  if(v>=45000)  return "#86E0AE"; return "#CFF3DF";
+}
+function colorFor(metric, rec){
+  if(metric==="price") return colorPrice(rec ? rec.median_man : null);
+  const arr = rec ? rec[metric] : null;
+  const latest = arr ? [...arr].reverse().find(x=>x!=null) : null;
+  return colorPct(latest);
+}
+
+/* ---------- data lookups ---------- */
+function weeklyOf(code){ return STATE.data.weekly?.regions?.[code] || null; }
+function tradesSggOf(code){ return STATE.data.trades?.sgg?.[code] || null; }
+function tradesEmdOf(sgg, umd){ return STATE.data.trades?.emd?.[sgg+"|"+umd] || null; }
+function latestPct(code, metric){
+  const w = weeklyOf(code); if(!w) return null;
+  const arr = w[metric]; if(!arr) return null;
+  return [...arr].reverse().find(x=>x!=null) ?? null;
+}
+
+/* ---------- load ---------- */
+async function loadAll(){
+  const [weekly, trades, geoSgg, geoEmd] = await Promise.all([
+    fetch("data/weekly.json").then(r=>r.json()).catch(()=>null),
+    fetch("data/trades_latest.json").then(r=>r.json()).catch(()=>null),
+    fetch("data/geo_sgg.json").then(r=>r.json()),
+    fetch("data/geo_emd.json").then(r=>r.json()),
+  ]);
+  STATE.data = { weekly, trades, geoSgg, geoEmd };
+
+  const seed = weekly?.seed || trades?.seed;
+  document.getElementById("seedBadge").style.display = seed ? "inline-block" : "none";
+  const upd = weekly?.updated || trades?.updated || "—";
+  document.getElementById("dateBadge").textContent = "기준일 " + upd + (weekly?.weeks?.length ? " · "+weekly.weeks.length+"주 데이터" : "");
+}
+
+/* ---------- map init ---------- */
+function initMap(){
+  MAP = L.map("rmap", { zoomControl:true, scrollWheelZoom:true, minZoom:8, maxZoom:15,
+    fullscreenControl:true }).setView([37.55,127.0], 9);
+
+  // Primary: VWorld (국토교통부 공간정보 오픈플랫폼) — native Korean labels.
+  // Reads optional key from window.VWORLD_KEY (set inline below or via your env).
+  // Falls back to OSM Korea community tiles if no key is set, so the page
+  // still renders before you've registered for a VWorld key.
+  const vkey = window.VWORLD_KEY || "";
+  const useVworld = vkey && vkey !== "PUT_VWORLD_KEY_HERE";
+  const vworldTile = `https://api.vworld.kr/req/wmts/1.0.0/${vkey}/Base/{z}/{y}/{x}.png`;
+  const osmKoreaTile = "https://tile.osm.kr/{z}/{x}/{y}.png";  // community-run, Korean labels
+  const fallbackTile = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
+  const primary = L.tileLayer(useVworld ? vworldTile : osmKoreaTile, {
+    attribution: useVworld ? "&copy; VWorld 국토교통부" : "&copy; OSM Korea",
+    maxZoom:19, subdomains:"abc",
+  });
+  primary.on("tileerror", () => {
+    // if Korean-label provider fails (rate limit/network), silently swap to CartoDB
+    if (primary._fallbackUsed) return;
+    primary._fallbackUsed = true;
+    primary.setUrl(fallbackTile);
+  });
+  primary.addTo(MAP);
+
+  // minimap for orientation
+  try{
+    const miniTiles = L.tileLayer(useVworld ? vworldTile : osmKoreaTile,
+      { minZoom:0, maxZoom:13, subdomains:"abc" });
+    MINIMAP = new L.Control.MiniMap(miniTiles, { toggleDisplay:true, minimized:false, width:130, height:130 }).addTo(MAP);
+  }catch(e){ /* plugin optional */ }
+}
+
+/* ---------- SGG layer ---------- */
+function renderSgg(){
+  if(STATE.layers.sgg){ MAP.removeLayer(STATE.layers.sgg); }
+  const m = STATE.metric;
+  STATE.layers.sgg = L.geoJSON(STATE.data.geoSgg, {
+    style: f => {
+      const code = f.properties.sgg;
+      const rec = m==="price" ? tradesSggOf(code) : weeklyOf(code);
+      return { fillColor: colorFor(m, rec), weight:1, color:"#FFFFFF", fillOpacity:0.82 };
+    },
+    onEachFeature: (f, layer) => {
+      const code = f.properties.sgg, nm = f.properties.full_nm;
+      const val = m==="price" ? (tradesSggOf(code)?.median_man) : latestPct(code,m);
+      const label = m==="price" ? fmtMan(val) : fmtPct(val);
+      layer.bindTooltip(`${nm} · ${label}`, {sticky:true, className:"rm-tooltip"});
+      layer.on({
+        mouseover: e=>{ e.target.setStyle({weight:2.5,color:"#1A1A1A",fillOpacity:0.92}); e.target.bringToFront(); },
+        mouseout:  e=>{ STATE.layers.sgg.resetStyle(e.target); },
+        click:     ()=> drillInto(code, nm),
+      });
+    }
+  }).addTo(MAP);
+}
+
+/* ---------- EMD (동) layer for one 시군구 ---------- */
+function renderEmd(sggCode, sggName){
+  if(STATE.layers.emd){ MAP.removeLayer(STATE.layers.emd); }
+  const m = STATE.metric;
+  const feats = STATE.data.geoEmd.features.filter(f=>f.properties.sgg===sggCode);
+  const fc = { type:"FeatureCollection", features:feats };
+  STATE.layers.emd = L.geoJSON(fc, {
+    style: f => {
+      const umd = f.properties.emd;
+      // EMD has price data (MOLIT) but not weekly %; for trade/jeonse we fall back to price shade
+      const rec = tradesEmdOf(sggCode, umd);
+      if(m==="price") return { fillColor: colorPrice(rec?.median_man), weight:1, color:"#FFFFFF", fillOpacity:0.85 };
+      // for % metrics at 동 level we don't have R-ONE data -> show neutral with price-based subtle shade
+      return { fillColor: rec? "#DCE7F5" : "#EEF1F4", weight:1, color:"#FFFFFF", fillOpacity:0.8 };
+    },
+    onEachFeature: (f, layer) => {
+      const umd = f.properties.emd;
+      const rec = tradesEmdOf(sggCode, umd);
+      const label = rec ? `중앙값 ${fmtMan(rec.median_man)} · ${rec.count}건` : "거래 데이터 없음";
+      layer.bindTooltip(`${umd} · ${label}`, {sticky:true, className:"rm-tooltip"});
+      layer.on({
+        mouseover: e=>{ e.target.setStyle({weight:2.5,color:"#1A1A1A",fillOpacity:0.95}); e.target.bringToFront(); },
+        mouseout:  e=>{ STATE.layers.emd.resetStyle(e.target); },
+        click:     ()=> showEmdInfo(sggCode, sggName, umd),
+      });
+    }
+  }).addTo(MAP);
+  try{ MAP.fitBounds(STATE.layers.emd.getBounds(), {padding:[30,30], maxZoom:14}); }catch(e){}
+}
+
+/* ---------- drilldown control ---------- */
+function drillInto(sggCode, sggName){
+  STATE.level = "emd"; STATE.activeSgg = sggCode;
+  if(STATE.layers.sgg) MAP.removeLayer(STATE.layers.sgg);
+  renderEmd(sggCode, sggName);
+  document.getElementById("chipLevel").textContent = "동 단위 보기";
+  setBreadcrumb(sggName);
+  showSggInfo(sggCode, sggName);
+  if(STATE.showMarkers) loadMarkers(sggCode);
+  updateHistogram(sggCode, null, sggName);
+}
+function drillOut(){
+  STATE.level = "sgg"; STATE.activeSgg = null;
+  if(STATE.layers.emd){ MAP.removeLayer(STATE.layers.emd); STATE.layers.emd=null; }
+  clearMarkers();
+  renderSgg();
+  MAP.setView([37.55,127.0], 9);
+  document.getElementById("chipLevel").textContent = "시군구 보기";
+  setBreadcrumb(null);
+  document.getElementById("infoTitle").textContent = "지역을 선택하세요";
+  document.getElementById("infoSub").textContent = "지도를 클릭하면 상세 정보가 표시됩니다";
+  document.getElementById("infoStats").innerHTML =
+    '<div class="empty-hint">시군구를 클릭하면<br>매매·전세 변동률과<br>실거래 통계가 나타납니다.</div>';
+  if(miniChart){ miniChart.destroy(); miniChart=null; }
+  updateHistogram(null,null,null);
+}
+function setBreadcrumb(sggName){
+  const bc = document.getElementById("breadcrumb");
+  if(!sggName){ bc.innerHTML = '<span class="bc-link" id="bcRoot">수도권</span>'; }
+  else bc.innerHTML = '<span class="bc-link" id="bcRoot">수도권</span><span class="bc-sep">›</span><span>'+sggName+'</span>';
+  document.getElementById("bcRoot").onclick = drillOut;
+}
+
+/* ---------- info panel ---------- */
+function showSggInfo(code, name){
+  const w = weeklyOf(code), t = tradesSggOf(code);
+  document.getElementById("infoTitle").textContent = name;
+  document.getElementById("infoSub").textContent = "시군구 · 클릭하여 동 단위 탐색됨";
+  const tr = latestPct(code,"trade"), je = latestPct(code,"jeonse");
+  let html = "";
+  html += statRow("매매 변동률(주간)", fmtPct(tr), tr>0?"up":tr<0?"down":"");
+  html += statRow("전세 변동률(주간)", fmtPct(je), je>0?"up":je<0?"down":"");
+  if(t){
+    html += statRow("실거래 중앙값", fmtMan(t.median_man));
+    html += statRow("평당 중앙값", t.median_per_py?fmtMan(t.median_per_py):"—");
+    html += statRow("최근 거래 건수", t.count.toLocaleString()+"건");
+  }
+  document.getElementById("infoStats").innerHTML = html;
+  drawMiniTrend(code, name);
+}
+function showEmdInfo(sgg, sggName, umd){
+  const rec = tradesEmdOf(sgg, umd);
+  document.getElementById("infoTitle").textContent = sggName+" "+umd;
+  document.getElementById("infoSub").textContent = "동(읍면동) · 아파트 매매 실거래 (최근 3개월)";
+  let html = "";
+  if(rec){
+    html += statRow("실거래 중앙값", fmtMan(rec.median_man));
+    html += statRow("평당 중앙값", rec.median_per_py?fmtMan(rec.median_per_py):"—");
+    html += statRow("25%~75% 구간", (rec.p25_man?fmtMan(rec.p25_man):"—")+" ~ "+(rec.p75_man?fmtMan(rec.p75_man):"—"));
+    html += statRow("거래 건수", rec.count.toLocaleString()+"건");
+  } else {
+    html = '<div class="empty-hint">최근 3개월 아파트 매매<br>거래 데이터가 없습니다.</div>';
+  }
+  document.getElementById("infoStats").innerHTML = html;
+  updateHistogram(sgg, umd, sggName+" "+umd);
+}
+function statRow(k,v,cls=""){
+  return `<div class="stat-row"><span class="stat-k">${k}</span><span class="stat-v ${cls}">${v}</span></div>`;
+}
+
+/* ---------- mini trend (12 weeks) ---------- */
+function drawMiniTrend(code, name){
+  const w = weeklyOf(code); if(!w) return;
+  const weeks = STATE.data.weekly.weeks.slice(-12);
+  const off = STATE.data.weekly.weeks.length - weeks.length;
+  const tr = w.trade.slice(off), je = w.jeonse.slice(off);
+  document.getElementById("trendSub").textContent = name+" · 최근 "+weeks.length+"주 변동률";
+  const ctx = document.getElementById("miniTrend");
+  if(miniChart) miniChart.destroy();
+  miniChart = new Chart(ctx, {
+    type:"line",
+    data:{ labels:weeks.map(w=>w.slice(5)), datasets:[
+      {label:"매매", data:tr, borderColor:"#E5474D", backgroundColor:"rgba(229,71,77,0.08)", fill:true, tension:0.3, pointRadius:0, borderWidth:2},
+      {label:"전세", data:je, borderColor:"#2E7CF6", backgroundColor:"rgba(46,124,246,0.06)", fill:true, tension:0.3, pointRadius:0, borderWidth:2},
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ boxWidth:10, font:{size:10} } } },
+      scales:{ x:{ ticks:{ font:{size:9}, maxTicksLimit:6 }, grid:{display:false} },
+               y:{ ticks:{ font:{size:9}, callback:v=>v+"%" }, grid:{color:"rgba(0,0,0,0.04)"} } } }
+  });
+}
+
+/* ---------- markers (cluster) ---------- */
+async function loadMarkers(sggCode){
+  clearMarkers();
+  // We don't have per-trade coordinates; place 동 centroids sized by count as a proxy.
+  const feats = STATE.data.geoEmd.features.filter(f=>f.properties.sgg===sggCode);
+  const cluster = L.markerClusterGroup({
+    iconCreateFunction: c => L.divIcon({ html:`<div class="cluster-pin" style="width:34px;height:34px">${c.getChildCount()}</div>`, className:"", iconSize:[34,34] }),
+    maxClusterRadius:50,
+  });
+  feats.forEach(f=>{
+    const rec = tradesEmdOf(sggCode, f.properties.emd);
+    if(!rec || !rec.count) return;
+    // centroid
+    let c; try{ c = L.geoJSON(f).getBounds().getCenter(); }catch(e){ return; }
+    const mk = L.circleMarker(c, { radius:Math.min(20,6+Math.sqrt(rec.count)), color:"#03C75A",
+      fillColor:"#03C75A", fillOpacity:0.6, weight:1.5 });
+    mk.bindPopup(`<div class="pop-h">${f.properties.emd}</div>
+      <div class="pop-row"><span>중앙값</span><b>${fmtMan(rec.median_man)}</b></div>
+      <div class="pop-row"><span>평당</span><b>${rec.median_per_py?fmtMan(rec.median_per_py):"—"}</b></div>
+      <div class="pop-row"><span>거래</span><b>${rec.count}건</b></div>`);
+    cluster.addLayer(mk);
+  });
+  STATE.layers.markers = cluster; MAP.addLayer(cluster);
+}
+function clearMarkers(){ if(STATE.layers.markers){ MAP.removeLayer(STATE.layers.markers); STATE.layers.markers=null; } }
+
+/* ============================================================
+   MARKET INSIGHTS — Section 02
+   All charts derived from existing data (weekly.json + trades_latest.json).
+   ============================================================ */
+
+const INSIGHT_CHARTS = {};  // holds chart instances for destroy/rebuild
+
+// shorten "서울특별시 강남구" -> "서울 강남" for tight labels
+function shortName(full){
+  return (full || "")
+    .replace("서울특별시","서울")
+    .replace("인천광역시","인천")
+    .replace("경기도","경기");
+}
+
+/* ---------- (1) 시장 온도계 — breadth doughnuts ---------- */
+function buildBreadth(){
+  const regions = STATE.data.weekly?.regions || {};
+  const codes = Object.keys(regions);
+  const FLAT = 0.05;  // |x| < 0.05% counts as 보합 (flat)
+
+  function summarize(metric){
+    let up=0, flat=0, down=0;
+    codes.forEach(c=>{
+      const v = latestPct(c, metric);
+      if (v == null) return;
+      if (v > FLAT) up++;
+      else if (v < -FLAT) down++;
+      else flat++;
+    });
+    return { up, flat, down, total: up+flat+down };
+  }
+
+  function drawDoughnut(canvasId, summaryId, kind){
+    const s = summarize(kind);
+    const ctx = document.getElementById(canvasId);
+    if(INSIGHT_CHARTS[canvasId]) INSIGHT_CHARTS[canvasId].destroy();
+    INSIGHT_CHARTS[canvasId] = new Chart(ctx, {
+      type:"doughnut",
+      data:{ labels:["상승","보합","하락"],
+        datasets:[{ data:[s.up, s.flat, s.down],
+          backgroundColor:["#E5474D","#B6BEC8","#2E7CF6"], borderWidth:0 }]},
+      options:{ responsive:true, maintainAspectRatio:false, cutout:"62%",
+        plugins:{ legend:{ position:"bottom", labels:{ boxWidth:10, font:{size:10}, padding:8 }},
+          tooltip:{ callbacks:{ label:c=>{
+            const pct = s.total ? (c.parsed/s.total*100).toFixed(1)+"%" : "0%";
+            return `${c.label} ${c.parsed}개 (${pct})`;
+          }}}
+        }
+      }
+    });
+    // summary text
+    const pct = s.total ? Math.round(s.up/s.total*100) : 0;
+    const cls = pct >= 60 ? "up" : pct < 40 ? "down" : "";
+    const tone = pct >= 60 ? "강세" : pct >= 50 ? "중립" : "둔화";
+    document.getElementById(summaryId).innerHTML =
+      `상승 <b class="${cls?'stat-v '+cls:''}">${s.up}/${s.total}</b> (${pct}%) — <b>${tone}</b>`;
+  }
+
+  drawDoughnut("chartBreadthTrade",  "breadthTradeSum",  "trade");
+  drawDoughnut("chartBreadthJeonse", "breadthJeonseSum", "jeonse");
+}
+
+/* ---------- (2) 모멘텀 — consecutive same-direction weeks ---------- */
+function buildMomentum(){
+  // streak = number of trailing weeks with the same sign as latest week
+  // (>0 means consecutive ups, <0 means consecutive downs).
+  const rows = [];
+  const regions = STATE.data.weekly?.regions || {};
+  for (const [code, w] of Object.entries(regions)){
+    const arr = w.trade || [];
+    let streak = 0, sign = 0;
+    for (let i = arr.length - 1; i >= 0; i--){
+      const v = arr[i];
+      if (v == null) continue;
+      const s = v > 0.02 ? 1 : v < -0.02 ? -1 : 0;
+      if (s === 0) break;
+      if (sign === 0) sign = s;
+      if (s !== sign) break;
+      streak++;
+    }
+    if (streak > 0) rows.push({ code, name: shortName(w.name), streak: streak * sign });
+  }
+  rows.sort((a,b)=> Math.abs(b.streak) - Math.abs(a.streak));
+  const top = rows.slice(0,10);
+
+  const ctx = document.getElementById("chartMomentum");
+  if(INSIGHT_CHARTS.mom) INSIGHT_CHARTS.mom.destroy();
+  INSIGHT_CHARTS.mom = new Chart(ctx, {
+    type:"bar",
+    data:{
+      labels: top.map(r=>r.name),
+      datasets:[{
+        data: top.map(r=>r.streak),
+        backgroundColor: top.map(r => r.streak >= 0 ? "#E5474D" : "#2E7CF6"),
+        borderRadius: 5,
+      }],
+    },
+    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label: c => {
+          const n = c.parsed.x;
+          return n >= 0 ? `${n}주 연속 상승` : `${-n}주 연속 하락`;
+        }}}
+      },
+      scales:{
+        x:{ title:{ display:true, text:"연속 주차 수", font:{size:10}, color:"#8B95A1" },
+            ticks:{ font:{size:10}, callback:v=>v+"주" }, grid:{color:"rgba(0,0,0,0.04)"} },
+        y:{ ticks:{ font:{size:11} }, grid:{display:false} } }
+    }
+  });
+}
+
+/* ---------- (3) 시간×지역 히트맵 ---------- */
+function buildHeatmap(){
+  // Seoul 25 gu only (codes start with "11"), 12 most recent weeks.
+  const regions = STATE.data.weekly?.regions || {};
+  const weeks = (STATE.data.weekly?.weeks || []).slice(-12);
+  const off = (STATE.data.weekly?.weeks?.length || 0) - weeks.length;
+
+  const seoul = Object.entries(regions)
+    .filter(([c]) => c.startsWith("11"))
+    .map(([c, w]) => ({ code:c, name: shortName(w.name), trade: w.trade.slice(off) }))
+    .sort((a,b) => a.name.localeCompare(b.name, "ko"));
+
+  const yLabels = seoul.map(r => r.name);
+  const xLabels = weeks.map(w => w.length === 10 ? w.slice(5) : w);
+
+  // build (x, y, v) tuples
+  const cells = [];
+  seoul.forEach((r, yi) => {
+    r.trade.forEach((v, xi) => {
+      cells.push({ x: xLabels[xi], y: r.name, v });
+    });
+  });
+
+  // color helper — divergent red/blue
+  function heatColor(v){
+    if (v == null || isNaN(v)) return "rgba(0,0,0,0.05)";
+    const a = Math.min(1, Math.abs(v) / 0.5);  // saturate at ±0.5%
+    return v >= 0 ? `rgba(229,71,77,${0.10 + 0.85*a})` : `rgba(46,124,246,${0.10 + 0.85*a})`;
+  }
+
+  const ctx = document.getElementById("chartHeatmap");
+  if(INSIGHT_CHARTS.heat) INSIGHT_CHARTS.heat.destroy();
+  // matrix chart requires matrix plugin registered globally (auto via UMD load)
+  INSIGHT_CHARTS.heat = new Chart(ctx, {
+    type:"matrix",
+    data:{
+      datasets:[{
+        label:"주간 매매 변동률 (%)",
+        data: cells,
+        backgroundColor: c => heatColor(c.raw.v),
+        borderColor:"rgba(255,255,255,0.7)", borderWidth: 1,
+        width:  ({chart}) => (chart.chartArea?.width  || 1) / xLabels.length - 1,
+        height: ({chart}) => (chart.chartArea?.height || 1) / yLabels.length - 1,
+      }],
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{
+          title: items => `${items[0].raw.y} · ${items[0].raw.x}`,
+          label: c => c.raw.v == null ? "데이터 없음" : `매매 변동률 ${fmtPct(c.raw.v)}`,
+        }}
+      },
+      scales:{
+        x:{ type:"category", labels:xLabels, ticks:{ font:{size:9}, autoSkip:false, maxRotation:0 }, grid:{display:false} },
+        y:{ type:"category", labels:yLabels, offset:true, reverse:true,
+            ticks:{ font:{size:9}, autoSkip:false }, grid:{display:false} },
+      }
+    }
+  });
+}
+
+/* ---------- (4) 다이버징 변동률 ---------- */
+function buildDiverging(){
+  const regions = STATE.data.weekly?.regions || {};
+  const rows = Object.entries(regions)
+    .map(([c,w]) => ({ code:c, name:shortName(w.name), v: latestPct(c, "trade") }))
+    .filter(r => r.v != null)
+    .sort((a,b) => b.v - a.v);
+  const ups   = rows.slice(0, 5);
+  const downs = rows.slice(-5);
+  // build in single dataset, alternating: downs (most negative first) then ups (most positive last)
+  const ordered = [...downs, ...ups];
+
+  const ctx = document.getElementById("chartDiverge");
+  if(INSIGHT_CHARTS.div) INSIGHT_CHARTS.div.destroy();
+  INSIGHT_CHARTS.div = new Chart(ctx, {
+    type:"bar",
+    data:{
+      labels: ordered.map(r => r.name),
+      datasets:[{
+        data: ordered.map(r => r.v),
+        backgroundColor: ordered.map(r => r.v >= 0 ? "#E5474D" : "#2E7CF6"),
+        borderRadius: 5,
+      }],
+    },
+    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label: c => `매매 ${fmtPct(c.parsed.x)}` }}
+      },
+      scales:{
+        x:{ ticks:{ font:{size:10}, callback:v=>v+"%" },
+            grid:{ color:"rgba(0,0,0,0.04)" },
+            // symmetric around 0 for true diverging look
+            suggestedMin: -Math.max(...ordered.map(r=>Math.abs(r.v))) * 1.1,
+            suggestedMax:  Math.max(...ordered.map(r=>Math.abs(r.v))) * 1.1 },
+        y:{ ticks:{ font:{size:11} }, grid:{display:false} },
+      }
+    }
+  });
+}
+
+/* ---------- (5) 자치구별 평당가 박스플롯 ---------- */
+function buildBoxplot(){
+  // boxplot needs raw arrays. We have prices_man (capped) per sgg, which is
+  // enough to compute meaningful quartiles for visual comparison.
+  const sgg = STATE.data.trades?.sgg || {};
+  // pick Seoul 25 + top-N suburbs by count to keep readable
+  const all = Object.entries(sgg)
+    .map(([code, r]) => ({
+      code, name: shortName(r.name), count: r.count,
+      // derive per-py prices when available; fall back to raw 만원
+      prices: (r.prices_man || []).slice().sort((a,b)=>a-b),
+    }))
+    .filter(r => r.prices.length >= 5);
+  // sort by median ascending so the chart reads left-to-right cheap→expensive
+  all.sort((a,b) => {
+    const ma = a.prices[Math.floor(a.prices.length/2)];
+    const mb = b.prices[Math.floor(b.prices.length/2)];
+    return ma - mb;
+  });
+  const showAll = all.slice(0, 30);  // cap for readability
+
+  const ctx = document.getElementById("chartBoxplot");
+  if(INSIGHT_CHARTS.box) INSIGHT_CHARTS.box.destroy();
+  INSIGHT_CHARTS.box = new Chart(ctx, {
+    type:"boxplot",
+    data:{
+      labels: showAll.map(r => r.name),
+      datasets:[{
+        label:"실거래가 (만원)",
+        data: showAll.map(r => r.prices),
+        backgroundColor:"rgba(3,199,90,0.18)",
+        borderColor:"#03C75A", borderWidth:1.2,
+        outlierBackgroundColor:"rgba(229,71,77,0.6)",
+        outlierRadius:2, itemRadius:0,
+      }],
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{
+          label: c => {
+            const s = c.raw;  // {min,q1,median,q3,max}
+            return [
+              `중앙값 ${fmtMan(s.median)}`,
+              `25%~75% ${fmtMan(s.q1)} ~ ${fmtMan(s.q3)}`,
+              `최소~최대 ${fmtMan(s.min)} ~ ${fmtMan(s.max)}`,
+            ];
+          }
+        }}
+      },
+      scales:{
+        x:{ ticks:{ font:{size:9}, autoSkip:false, maxRotation:60, minRotation:45 }, grid:{display:false} },
+        y:{ ticks:{ font:{size:10}, callback: v => fmtMan(v) }, grid:{color:"rgba(0,0,0,0.04)"} },
+      }
+    }
+  });
+}
+
+/* ---------- (6) 가격대별 거래 분포 (히스토그램 with 중앙값/평균선) ---------- */
+function updateHistogram(sgg, umd, label){
+  const ctx = document.getElementById("chartHist");
+  let prices = null, title = "수도권 전체";
+  if(umd){ const r = tradesEmdOf(sgg,umd); prices = r?.prices_man; title = label; }
+  else if(sgg){ const r = tradesSggOf(sgg); prices = r?.prices_man; title = label; }
+  else {
+    prices = Object.values(STATE.data.trades?.sgg || {})
+      .flatMap(r => r.prices_man || []).filter(Boolean);
+    title = "수도권 전체";
+  }
+  document.getElementById("histSub").textContent =
+    title + " · 아파트 매매 가격대별 건수 (1억 단위, 최근 3개월) · 빨간선=중앙값, 점선=평균";
+
+  if(INSIGHT_CHARTS.hist) INSIGHT_CHARTS.hist.destroy();
+  if(!prices || !prices.length) return;
+
+  const sorted = prices.slice().sort((a,b)=>a-b);
+  const median = sorted[Math.floor(sorted.length/2)];
+  const mean   = sorted.reduce((a,b)=>a+b,0) / sorted.length;
+  const max    = sorted[sorted.length-1];
+  const binW   = 10000;  // 1억
+  const nbins  = Math.min(25, Math.ceil(max/binW));
+  const bins   = new Array(nbins).fill(0);
+  prices.forEach(p => { const i = Math.min(nbins-1, Math.floor(p/binW)); bins[i]++; });
+  const labels = bins.map((_,i) => i + "~" + (i+1) + "억");
+
+  // annotation lines via custom plugin
+  const linePlugin = {
+    id:"hist-lines",
+    afterDatasetsDraw(chart){
+      const {ctx, chartArea:{top,bottom}, scales:{x}} = chart;
+      function drawLine(value, color, dashed, labelTxt){
+        const px = x.getPixelForValue(Math.min(nbins-1, value/binW) - 0.5);
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = color; ctx.lineWidth = 2;
+        if(dashed) ctx.setLineDash([6,4]);
+        ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
+        ctx.fillStyle = color; ctx.font="bold 10px 'Noto Sans KR'";
+        ctx.fillText(labelTxt, px + 4, top + 12);
+        ctx.restore();
+      }
+      drawLine(median, "#E5474D", false, "중앙값 " + fmtMan(median));
+      drawLine(mean,   "#1A1A1A", true,  "평균 " + fmtMan(mean));
+    }
+  };
+
+  INSIGHT_CHARTS.hist = new Chart(ctx, {
+    type:"bar",
+    data:{ labels, datasets:[{ label:"거래 건수", data:bins, backgroundColor:"#03C75A", borderRadius:4 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ title: items => items[0].label + " 구간", label: c => c.parsed.y + "건" } }
+      },
+      scales:{
+        x:{ ticks:{ font:{size:10} }, grid:{display:false} },
+        y:{ beginAtZero:true, ticks:{ font:{size:10}, precision:0 }, grid:{color:"rgba(0,0,0,0.04)"} },
+      }
+    },
+    plugins:[linePlugin],
+  });
+}
+
+/* ---------- legend ---------- */
+function renderLegend(){
+  const m = STATE.metric, el = document.getElementById("legend");
+  document.getElementById("legendTitle").textContent =
+    m==="price" ? "실거래 중앙값(만원)" : (m==="trade"?"매매 주간 변동률":"전세 주간 변동률");
+  let grades;
+  if(m==="price"){
+    grades = [["#014D2E","15억↑"],["#02723F","11–15억"],["#03A050","8.5–11억"],["#36C47A","6.5–8.5억"],["#86E0AE","4.5–6.5억"],["#CFF3DF","~4.5억"],["#E2E6EB","데이터없음"]];
+  } else {
+    grades = [["#B91C1C","+0.40%↑"],["#EF4444","+0.30%"],["#F87171","+0.20%"],["#FCA5A5","+0.10%"],["#FECACA","+0~"],["#B6BEC8","보합"],["#3B82F6","하락"],["#E2E6EB","데이터없음"]];
+  }
+  el.innerHTML = grades.map(g=>`<div class="lg-row"><span class="lg-sw" style="background:${g[0]}"></span>${g[1]}</div>`).join("");
+}
+
+/* ---------- metric switch ---------- */
+function setMetric(m){
+  STATE.metric = m;
+  document.querySelectorAll("#metricSeg button").forEach(b=>b.classList.toggle("on", b.dataset.metric===m));
+  document.getElementById("mapSub").textContent = m==="price"
+    ? "시군구 실거래 중앙값(아파트 매매) · 클릭 시 동 단위 거래 분포 · 다시 빈 곳 클릭 시 복귀"
+    : "시군구를 클릭하면 동(읍면동) 단위로 확대됩니다 · 다시 빈 곳을 클릭하면 시군구로 복귀";
+  renderLegend();
+  if(STATE.level==="sgg") renderSgg();
+  else renderEmd(STATE.activeSgg, document.getElementById("infoTitle").textContent);
+}
+
+/* ---------- wire up ---------- */
+async function boot(){
+  initMap();
+  await loadAll();
+  document.getElementById("mapLoading").style.display = "none";
+  renderLegend();
+  renderSgg();
+  buildBreadth();
+  buildMomentum();
+  buildHeatmap();
+  buildDiverging();
+  buildBoxplot();
+  updateHistogram(null, null, null);
+
+  document.querySelectorAll("#metricSeg button").forEach(b=>{
+    b.onclick = ()=> setMetric(b.dataset.metric);
+  });
+  document.getElementById("chipLevel").onclick = ()=>{ if(STATE.level==="emd") drillOut(); };
+  document.getElementById("chipMarkers").onclick = (e)=>{
+    STATE.showMarkers = !STATE.showMarkers;
+    e.target.classList.toggle("on", STATE.showMarkers);
+    if(STATE.showMarkers && STATE.level==="emd") loadMarkers(STATE.activeSgg);
+    else clearMarkers();
+  };
+  document.getElementById("bcRoot").onclick = drillOut;
+}
+if(document.readyState!=="loading") boot(); else document.addEventListener("DOMContentLoaded", boot);
+
+</script>
+</body>
+</html>
